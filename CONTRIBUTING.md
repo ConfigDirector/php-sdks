@@ -56,8 +56,8 @@ matches its `composer.json`. `make audit` runs `composer audit` against each loc
 are. `make test-floor` runs `make verify-php test` in the official `php:8.3-cli` image, pulled again on
 every run so that it is the newest 8.3 release, on a copy of this working tree without any `vendor/`.
 
-CI runs the suites on PHP 8.3, 8.4 and 8.5 on Ubuntu, and on PHP 8.5 on macOS and Windows, and
-`make test-lowest` on PHP 8.3 and 8.5. Locally, `make check-all` covers your own PHP and, through
+CI runs the suites on PHP 8.3, 8.4 and 8.5 on Ubuntu, on PHP 8.5 on macOS, and on PHP 8.3 and 8.5
+on Windows, and `make test-lowest` on PHP 8.3 and 8.5. Locally, `make check-all` covers your own PHP and, through
 `make test-floor`, PHP 8.3.
 
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
