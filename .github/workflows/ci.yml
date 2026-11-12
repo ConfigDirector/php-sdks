@@ -1,0 +1,92 @@
+name: php-sdks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The checks themselves live in the Makefile so that CI and the pre-push hook cannot drift
+# apart. bash everywhere keeps the make recipes portable across the runner images.
+defaults:
+  run:
+    shell: bash
+
+# Each job sets up the newest patch release of its PHP line: a runner's pre-installed PHP lags the
+# patch releases, and verify-php fails on one without the security fixes it lists.
+jobs:
+  lint:
+    name: Lint and audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # PHP-CS-Fixer recommends running on the oldest PHP the packages support.
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.3"
+          extensions: curl
+          tools: composer
+          coverage: none
+        env:
+          update: true
+
+      - run: make verify-php
+      - run: make verify-lock
+      - run: make lint
+      - run: make audit
+
+  lowest:
+    name: Test (lowest allowed dependencies on PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.3", "8.5"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl
+          tools: composer
+          coverage: none
+        env:
+          update: true
+
+      - run: make verify-php
+      - run: make test-lowest
+
+  test:
+    name: Test (PHP ${{ matrix.php }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        php: ["8.3", "8.4", "8.5"]
+        include:
+          - os: macos-latest
+            php: "8.5"
+          - os: windows-latest
+            php: "8.5"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl
+          tools: composer
+          coverage: none
+        env:
+          update: true
+
+      - run: make verify-php
+      - run: make test

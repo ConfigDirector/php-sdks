@@ -1,0 +1,49 @@
+{
+    "name": "configdirector/server-sdk",
+    "description": "PHP server SDK for ConfigDirector. ConfigDirector is a remote configuration and feature flag service.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "configdirector",
+        "config",
+        "configuration",
+        "remote config",
+        "remote configuration",
+        "feature flag",
+        "feature toggle",
+        "feature switch"
+    ],
+    "homepage": "https://www.configdirector.com",
+    "authors": [
+        {
+            "name": "ConfigDirector"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "psr/log": "^2.0 || ^3.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.3",
+        "phpunit/phpunit": "^12.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "ConfigDirector\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ConfigDirector\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.3.36"
+        },
+        "sort-packages": true
+    }
+}

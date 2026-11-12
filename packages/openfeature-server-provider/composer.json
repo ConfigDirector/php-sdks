@@ -1,0 +1,64 @@
+{
+    "name": "configdirector/openfeature-server-provider",
+    "description": "OpenFeature server provider for ConfigDirector. ConfigDirector is a remote configuration and feature flag service.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "configdirector",
+        "openfeature server provider",
+        "openfeature provider",
+        "openfeature",
+        "server",
+        "provider",
+        "config",
+        "configuration",
+        "remote config",
+        "remote configuration",
+        "feature flag",
+        "feature toggle",
+        "feature switch"
+    ],
+    "homepage": "https://www.configdirector.com",
+    "authors": [
+        {
+            "name": "ConfigDirector"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "configdirector/server-sdk": "dev-main",
+        "open-feature/sdk": "^2.4"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.3",
+        "phpunit/phpunit": "^12.5"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../server-sdk",
+            "options": {
+                "versions": {
+                    "configdirector/server-sdk": "dev-main"
+                }
+            }
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "ConfigDirector\\OpenFeature\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ConfigDirector\\OpenFeature\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.3.36"
+        },
+        "sort-packages": true
+    }
+}
