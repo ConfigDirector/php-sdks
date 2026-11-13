@@ -451,6 +451,18 @@ final class TestClientTest extends TestCase
         self::assertSame([['timeout' => 50]], $logger->contextsLoggedAt('warning'));
     }
 
+    public function testAHeldInitializeWaitsForTheWholeTimeoutWhenASleepWakesEarly(): void
+    {
+        $output = PhpProcess::running(__DIR__ . '/Processes/hold-with-a-sleep-that-wakes-early.php', [])
+            ->finished()
+            ->output;
+
+        self::assertStringStartsWith("woke early\n", $output);
+        self::assertMatchesRegularExpression('/^waited (\d+) milliseconds$/m', $output);
+        preg_match('/^waited (\d+) milliseconds$/m', $output, $waited);
+        self::assertGreaterThanOrEqual(50, (int) ($waited[1] ?? 0));
+    }
+
     public function testCompleteInitializationAfterAHeldInitializeMakesTheClientReadyAndFiresClientReadyOnce(): void
     {
         $testClient = ConfigDirectorTesting::createTestClient(

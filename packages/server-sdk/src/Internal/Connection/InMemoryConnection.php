@@ -136,7 +136,12 @@ final class InMemoryConnection implements Connection
     private function holdUntilTheTimeout(): UndeliveredPayload
     {
         $this->state = InMemoryConnectionState::HoldingAnInitialization;
-        usleep($this->timeoutMilliseconds * 1_000);
+        $deadline = hrtime(true) + $this->timeoutMilliseconds * 1_000_000;
+        $remainingNanoseconds = $deadline - hrtime(true);
+        while ($remainingNanoseconds > 0) {
+            usleep(intdiv($remainingNanoseconds + 999, 1_000));
+            $remainingNanoseconds = $deadline - hrtime(true);
+        }
 
         return UndeliveredPayload::WaitReachedTheTimeout;
     }
