@@ -13,7 +13,7 @@ Each package has its own changelog, version, and release. Pick the server SDK to
 
 ## Sample apps
 
-Small, runnable applications will live under `samples/`, grouped by the package they demonstrate.
+Small, runnable applications live under [`samples/`](samples/), grouped by the package they demonstrate. Start with the [Slim sample](samples/server-sdk/slim/) for the server SDK.
 
 ## Getting Help
 

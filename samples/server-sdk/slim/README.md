@@ -1,0 +1,138 @@
+# Slim sample
+
+A minimal [Slim](https://www.slimframework.com) app using the ConfigDirector PHP server SDK. It
+mirrors the Flask sample in the Python SDK and the Gin sample in the Go SDKs: a single `/configs`
+route that evaluates a handful of configs and returns them as JSON.
+
+## Running it
+
+You need Composer 2 and PHP 8.3.36, 8.4.27, 8.5.12 or a later release on the same line, the first
+releases with the fixes for CVE-2026-109618 and CVE-2026-109619.
+
+```bash
+cd samples/server-sdk/slim
+composer install
+cp .env.example .env      # optional, the sample runs without a real key
+php -S 127.0.0.1:3700 -t public
+```
+
+Then:
+
+```bash
+curl 'http://127.0.0.1:3700/configs?id=user-123&plan=pro'
+```
+
+```json
+{
+  "temporary-feature-flag": true,
+  "permanent-kill-switch": true,
+  "integer-config": 42,
+  "day-of-the-week-config": "Tuesday",
+  "json-value-config": { "greeting": "hello", "sizes": [1, 2] }
+}
+```
+
+The SDK does not connect to ConfigDirector yet. Until it does, every client evaluates the same sample
+configs built into the SDK, whatever key it is given, and what you see above is what they serve to
+this context.
+
+Query parameters double as the context the configs are evaluated for: `id`, `kind`, `name` and
+`anonymous` map to the matching `Context` fields, and anything else becomes a trait:
+
+```
+/configs?id=user-123&name=Ada&plan=pro&region=eu
+```
+
+Any other route answers `404` with a hint to `GET /configs`. Stop the server with Ctrl-C.
+
+Run the tests with `vendor/bin/phpunit`.
+
+## One client per request
+
+This is the most important thing the sample shows. [`SampleApplication.php`](src/SampleApplication.php)
+registers the client in the application's container. The first time a request asks the container
+for it, the container creates it and calls `initialize()`; everything else in that request that
+asks gets the same client.
+
+```php
+$container = new Container([
+    ConfigDirectorClient::class => fn(): ConfigDirectorClient => self::initializedClient($settings),
+]);
+```
+
+[`ConfigsAction`](src/ConfigsAction.php) receives that client in its constructor and reads all five
+configs through it.
+
+In Go or Python an application creates one client for the process and shares it until the process
+ends. A PHP request starts with empty memory: PHP-FPM, Apache's PHP module and the built-in
+server above run the application again for each request and throw away everything it created when
+the request ends. One client per request is therefore the most a PHP application can share, and the
+SDK will keep what has to outlive a request outside the client: it will keep the values
+ConfigDirector serves in a local store on disk, shared by the PHP processes of one host, and only one
+request per polling interval will ask ConfigDirector for new ones. A client per request will cost a
+read of that store, not a connection to ConfigDirector.
+
+Within a request, create the client once and read through it as often as you need. Never create one
+per read: each new client has to be initialized again before it serves values, and the handlers and
+watches registered on one client never see another's reads.
+
+## What else it demonstrates
+
+**Initialization is explicit and non-fatal.** `initialize()` waits for values up to
+`CONFIGDIRECTOR_TIMEOUT` milliseconds. When none arrive in time, it logs a warning and returns, and
+every read in that request returns its in-code default value. Creating the client makes no network
+call.
+
+**In-code default values are the fallback.** Every `getValue()` call passes the value to serve when
+ConfigDirector cannot provide one, so it should be the safe choice. Its type also decides how the
+config value is read: a `bool`, a `string`, an `int`, a `float`, or an array for a JSON config.
+
+**The context is per request; so is the client.** `contextFrom()` in
+[`ConfigsAction.php`](src/ConfigsAction.php) maps query parameters onto a `Context`. A real
+application would build it from the signed-in user.
+
+**Logging goes through `error_log`.** The SDK writes warnings and errors through PHP's `error_log`,
+which the built-in server prints in its terminal. `CONFIGDIRECTOR_LOG_LEVEL` sets the lowest level it
+writes, as a PSR-3 level name such as `debug`. To send the SDK's lines to your application's own log,
+pass a PSR-3 logger, such as a Monolog logger, as `logger:` to `ConfigDirector::createClient()`.
+
+**Settings come from the environment.** [`ConfigDirectorSettings.php`](src/ConfigDirectorSettings.php)
+reads the key, connection mode, timeout, base URL and log level from the `CONFIGDIRECTOR_*` variables,
+and [`public/index.php`](public/index.php) adds the ones in a `.env` file, without overriding a
+variable already set in the environment. The sample passes only the options the environment names,
+so every other option keeps the SDK's default. A mode the SDK does not have, or a timeout that is not
+a whole number, stops every request with a message that names the variable. A value the SDK refuses,
+such as a base URL that is not http or https or a log level that is not a PSR-3 level, makes every
+request to `/configs` answer `500`, and the server's terminal shows the SDK's message.
+
+The SDK also supports watching configs and subscribing to the client's events; see `watch()` and
+`on()` in [`ConfigDirectorClient`](../../../packages/server-sdk/src/ConfigDirectorClient.php).
+
+## Testing
+
+[`tests/SampleApplicationTest.php`](tests/SampleApplicationTest.php) calls the application in process:
+it creates the Slim app with `SampleApplication::create()`, builds each request with Slim's PSR-7
+factory and passes it to `$app->handle()`, so no server runs and nothing reaches the network.
+
+```php
+$app = SampleApplication::create(ConfigDirectorSettings::fromEnvironment([]));
+
+$request = (new ServerRequestFactory())->createServerRequest('GET', '/configs?id=user-123&plan=pro');
+$response = $app->handle($request);
+```
+
+To see the context each config was evaluated for, and why it got its value, a test takes the
+request's client from the container and registers a `configEvaluated` handler before handling the
+request. The SDK does not connect to ConfigDirector yet, so the tests assert what the sample configs
+built into it serve.
+
+[`tests/ConfigDirectorSettingsTest.php`](tests/ConfigDirectorSettingsTest.php) covers how the
+environment becomes the client's settings.
+
+## Running without a server SDK key
+
+Once the SDK connects to ConfigDirector, a request that finds no values in the local store and
+cannot get any, because the key is wrong or ConfigDirector cannot be reached, will leave the client
+not ready, and every config will fall back to the in-code default value this app passes in. That is
+the path a production app takes with a wrong key, so it is worth seeing: the app keeps serving, on
+the in-code default values you chose.

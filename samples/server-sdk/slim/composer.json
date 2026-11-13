@@ -1,0 +1,46 @@
+{
+    "name": "configdirector/slim-sample",
+    "description": "Slim sample application for the ConfigDirector PHP server SDK",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "configdirector/server-sdk": "dev-main",
+        "php-di/php-di": "^7.1",
+        "slim/psr7": "^1.8",
+        "slim/slim": "^4.15",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.3",
+        "phpunit/phpunit": "^12.5"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../../../packages/server-sdk",
+            "options": {
+                "versions": {
+                    "configdirector/server-sdk": "dev-main"
+                }
+            }
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.3.36"
+        },
+        "sort-packages": true
+    }
+}
