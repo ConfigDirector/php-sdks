@@ -6,6 +6,7 @@ namespace ConfigDirector\Internal\Client;
 
 use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConfigEvaluation;
+use ConfigDirector\ConfigsUpdatedEvent;
 use ConfigDirector\Context;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Internal\Connection\ConfigDefinition;
@@ -30,14 +31,18 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
 
     private readonly InvalidContextKinds $invalidContextKinds;
 
+    private readonly Watches $watches;
+
     public function __construct(
         private readonly Connection $connection,
         private readonly Metadata $metadata,
         private readonly int $timeoutMilliseconds,
         private readonly LoggerInterface $logger,
+        private readonly EventHandlers $eventHandlers,
     ) {
         $this->evaluator = new ConfigEvaluator();
         $this->invalidContextKinds = new InvalidContextKinds();
+        $this->watches = new Watches();
     }
 
     #[\Override]
@@ -52,8 +57,8 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             return;
         }
 
-        $this->payload = $this->connection->payloadDeliveredWithin($this->timeoutMilliseconds);
-        if ($this->payload === null) {
+        $payload = $this->connection->payloadDeliveredWithin($this->timeoutMilliseconds);
+        if ($payload === null) {
             $this->logger->warning(
                 '[ConfigDirectorClient] Timed out waiting for initialization after {timeout}ms. '
                 . 'Configs return the in-code default value until values arrive.',
@@ -63,6 +68,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             return;
         }
 
+        $this->takeIn($payload);
         $this->logger->debug('[ConfigDirectorClient] Received initial payload from the server, client is ready');
     }
 
@@ -84,7 +90,108 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     #[\Override]
     public function evaluate(string $configKey, mixed $defaultValue, ?Context $context = null): ConfigEvaluation
     {
-        $inCodeDefaultValue = InCodeDefaultValue::from($defaultValue);
+        return $this->read($configKey, InCodeDefaultValue::from($defaultValue), $context);
+    }
+
+    #[\Override]
+    public function getAllConfigs(?Context $context = null, ?array $configKeys = null): array
+    {
+        $admittedContext = $this->admittedContextOrNone($context);
+        if ($this->payload === null) {
+            return [];
+        }
+
+        $states = [];
+        foreach ($this->payload->configs as $definition) {
+            if ($configKeys === null || in_array($definition->key, $configKeys, true)) {
+                $states[$definition->key] = $definition->stateServing(
+                    $this->valueServedTo($admittedContext, $definition, $this->payload),
+                );
+            }
+        }
+
+        return $states;
+    }
+
+    #[\Override]
+    public function watch(
+        string $configKey,
+        mixed $defaultValue,
+        callable $callback,
+        ?Context $context = null,
+    ): \Closure {
+        $watch = new Watch($configKey, InCodeDefaultValue::from($defaultValue), $callback, $context);
+        $this->watches->add($watch);
+
+        return function () use ($watch): void {
+            $this->watches->remove($watch);
+        };
+    }
+
+    #[\Override]
+    public function unwatch(string $configKey, ?callable $callback = null): void
+    {
+        if ($callback === null) {
+            $this->watches->removeAllOn($configKey);
+        } else {
+            $this->watches->removeFirstWithCallback($configKey, $callback);
+        }
+    }
+
+    #[\Override]
+    public function unwatchAll(): void
+    {
+        $this->watches->removeAll();
+    }
+
+    #[\Override]
+    public function on(string $eventName, callable $handler): void
+    {
+        $this->eventHandlers->add(ClientEventName::named($eventName), $handler);
+    }
+
+    #[\Override]
+    public function off(string $eventName, ?callable $handler = null): void
+    {
+        $knownEventName = ClientEventName::named($eventName);
+        if ($handler === null) {
+            $this->eventHandlers->removeAllOf($knownEventName);
+        } else {
+            $this->eventHandlers->remove($knownEventName, $handler);
+        }
+    }
+
+    #[\Override]
+    public function dispose(): void
+    {
+        $this->payload = null;
+        $this->disposed = true;
+        $this->eventHandlers->removeAll();
+        $this->watches->removeAll();
+    }
+
+    /**
+     * @return ConfigEvaluation<bool|string|int|float|array<array-key, mixed>>
+     */
+    private function read(
+        string $configKey,
+        InCodeDefaultValue $inCodeDefaultValue,
+        ?Context $context,
+    ): ConfigEvaluation {
+        $evaluation = $this->evaluationOf($configKey, $inCodeDefaultValue, $context);
+        $this->eventHandlers->deliverConfigEvaluated($evaluation);
+
+        return $evaluation;
+    }
+
+    /**
+     * @return ConfigEvaluation<bool|string|int|float|array<array-key, mixed>>
+     */
+    private function evaluationOf(
+        string $configKey,
+        InCodeDefaultValue $inCodeDefaultValue,
+        ?Context $context,
+    ): ConfigEvaluation {
         $admittedContext = $this->admittedContextOrNone($context);
         $inCodeDefaultValueBecauseOf = static fn(EvaluationReason $reason): ConfigEvaluation => new ConfigEvaluation(
             $configKey,
@@ -134,31 +241,37 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         return $evaluation;
     }
 
-    #[\Override]
-    public function getAllConfigs(?Context $context = null, ?array $configKeys = null): array
+    private function takeIn(ServerSdkPayload $payload): void
     {
-        $admittedContext = $this->admittedContextOrNone($context);
-        if ($this->payload === null) {
-            return [];
+        $update = new ConfigsUpdatedEvent(
+            $payload->configKeys(),
+            $this->payload?->configKeysAbsentFrom($payload) ?? [],
+        );
+        $becomesReady = $this->payload === null;
+        $this->payload = $payload;
+        $this->eventHandlers->deliverConfigsUpdated($update);
+        $this->deliverToTheWatchesOn([...$update->keys, ...$update->removedKeys]);
+        if ($becomesReady) {
+            $this->eventHandlers->deliverClientReady();
         }
+    }
 
-        $states = [];
-        foreach ($this->payload->configs as $definition) {
-            if ($configKeys === null || in_array($definition->key, $configKeys, true)) {
-                $states[$definition->key] = $definition->stateServing(
-                    $this->valueServedTo($admittedContext, $definition, $this->payload),
+    /**
+     * @param list<string> $configKeys
+     */
+    private function deliverToTheWatchesOn(array $configKeys): void
+    {
+        foreach ($this->watches->on($configKeys) as $watch) {
+            $value = $this->read($watch->configKey, $watch->inCodeDefaultValue, $watch->context)->value;
+            try {
+                $watch->receive($value);
+            } catch (\Throwable $exception) {
+                $this->logger->error(
+                    "[ConfigDirectorClient] A watch on '{configKey}' threw an exception, which was ignored.",
+                    ['configKey' => $watch->configKey, 'exception' => $exception],
                 );
             }
         }
-
-        return $states;
-    }
-
-    #[\Override]
-    public function dispose(): void
-    {
-        $this->payload = null;
-        $this->disposed = true;
     }
 
     private function admittedContextOrNone(?Context $context): ?Context

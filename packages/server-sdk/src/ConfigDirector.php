@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace ConfigDirector;
 
+use ConfigDirector\Internal\Client\ClientEventName;
 use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
+use ConfigDirector\Internal\Client\EventHandlers;
 use ConfigDirector\Internal\Connection\HardCodedConnection;
 use ConfigDirector\Internal\Logging\ErrorLogLogger;
 use Psr\Log\LoggerInterface;
@@ -73,7 +75,28 @@ final class ConfigDirector
             $metadata ?? new Metadata(),
             $connection->timeout,
             $logger,
+            self::eventHandlersRegisteredFrom($hooks ?? new ClientHooks(), $logger),
         );
+    }
+
+    private static function eventHandlersRegisteredFrom(ClientHooks $hooks, LoggerInterface $logger): EventHandlers
+    {
+        $eventHandlers = new EventHandlers($logger);
+        foreach (ClientEventName::cases() as $eventName) {
+            foreach ($eventName->hooksIn($hooks) as $hook) {
+                if (is_callable($hook)) {
+                    $eventHandlers->add($eventName, $hook);
+                } else {
+                    $logger->warning(
+                        "[ConfigDirectorClient] A '{eventName}' hook of type {hookType} was ignored because it is not "
+                        . 'callable.',
+                        ['eventName' => $eventName->value, 'hookType' => get_debug_type($hook)],
+                    );
+                }
+            }
+        }
+
+        return $eventHandlers;
     }
 
     private static function errorLogLoggerWritingFrom(string $logLevel): LoggerInterface

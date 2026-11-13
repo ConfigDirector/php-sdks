@@ -45,7 +45,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   config keys, keyed by config key. It is empty until the client is ready. A `ConfigState` has
   `id`, `key`, `type`, `value` (the served text), `valueId`, `variation`, `ruleId` and `shareId`.
 - `dispose()` can be called more than once. Afterwards the client is not ready, every read returns
-  its in-code default value with the reason `client-not-ready`, and `getAllConfigs` is empty.
+  its in-code default value with the reason `client-not-ready`, `getAllConfigs` is empty, and every
+  event handler, hook and watch is removed.
+- `on($eventName, $handler)` subscribes to the events `clientReady`, `configsUpdated`,
+  `configEvaluated` and `connectionError`. `off($eventName, $handler)` removes that handler, or
+  every handler of the event when no handler is given. An unknown event name throws
+  `ConfigDirectorValidationException`.
+- `clientReady` handlers are called with no argument when the client first receives values.
+  `configsUpdated` handlers receive a `ConfigsUpdatedEvent` with `keys`, the config keys received,
+  and `removedKeys`, the keys no longer received. `configEvaluated` handlers receive a
+  `ConfigEvaluatedEvent` with the `evaluation` of each `getValue`, `evaluate` and watch, before the
+  read returns; `getAllConfigs` fires none. `connectionError` handlers receive a
+  `ConnectionErrorEvent` with the `error`; nothing fires it yet, because the client does not connect
+  to ConfigDirector yet.
+- `ClientHooks` takes one handler or a list of handlers for each event, as the named arguments
+  `clientReady`, `configsUpdated`, `configEvaluated` and `connectionError`, registered before any
+  event can fire. An entry of a list that is not callable is ignored and a warning is logged.
+- The client receives values during `initialize()`. Each time, it calls the `configsUpdated`
+  handlers, then the watches on the keys received or removed, then the `clientReady` handlers when
+  the client has just become ready.
+- `watch($configKey, $defaultValue, $callback, $context)` calls the callback with the config's
+  value each time the client receives values that include the config, whether or not the value
+  changed, and with the in-code default value when the config is removed. It returns a function
+  that removes that watch. `unwatch($configKey, $callback)` removes the first watch on the key with
+  that callback, or every watch on the key when no callback is given, and `unwatchAll()` removes
+  every watch.
+- A handler or watch that throws is logged at error level, with the exception under the PSR-3
+  `exception` key, and ignored: the other handlers still run and the read returns its value.
 - `logger` takes a PSR-3 logger. Without one the SDK writes warnings and errors through
   `error_log`, and `logLevel` takes a PSR-3 level, such as `Psr\Log\LogLevel::DEBUG`, to write
   more or less. A `logLevel` that is not a PSR-3 level throws `ConfigDirectorValidationException`.

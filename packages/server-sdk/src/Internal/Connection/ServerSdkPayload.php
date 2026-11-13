@@ -16,4 +16,23 @@ final readonly class ServerSdkPayload
         public array $configs,
         public array $segments,
     ) {}
+
+    /**
+     * @return list<string>
+     */
+    public function configKeys(): array
+    {
+        return array_values(array_map(
+            static fn(ConfigDefinition $definition): string => $definition->key,
+            $this->configs,
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function configKeysAbsentFrom(self $newerPayload): array
+    {
+        return array_values(array_diff($this->configKeys(), $newerPayload->configKeys()));
+    }
 }

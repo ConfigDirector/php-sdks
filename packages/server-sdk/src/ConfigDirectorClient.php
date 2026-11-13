@@ -88,8 +88,98 @@ interface ConfigDirectorClient
     public function getAllConfigs(?Context $context = null, ?array $configKeys = null): array;
 
     /**
-     * Disposes of the client. Afterwards the client is not ready and every read returns its
-     * in-code default value. It is safe to call more than once.
+     * Watches a config. The callback is called with the config's value each time the client
+     * receives values that include the config, whether or not the value changed, and with the
+     * in-code default value when the config is removed. It is not called when the watch is
+     * registered. The client receives values during {@see initialize()}, so a watch registered
+     * before it receives the value during it.
+     *
+     * Each value is evaluated as {@see getValue()} evaluates it and fires `configEvaluated`. A
+     * callback that throws is logged at error level and ignored: the other watches still run.
+     *
+     * @template TDefaultValue
+     *
+     * @param string $configKey The config key to watch.
+     * @param TDefaultValue $defaultValue The in-code default value. Its type decides the type of
+     *     the values the callback receives, as for {@see getValue()}.
+     * @param callable(TDefaultValue): void $callback Called with each value.
+     * @param Context|null $context The context to evaluate the targeting rules for.
+     *
+     * @return \Closure(): void A function that removes this watch.
+     *
+     * @throws ConfigDirectorValidationException When the in-code default value is `null` or is not
+     *     a `bool`, a `string`, an `int`, a `float` or an array.
+     */
+    public function watch(
+        string $configKey,
+        mixed $defaultValue,
+        callable $callback,
+        ?Context $context = null,
+    ): \Closure;
+
+    /**
+     * Removes the first watch on a config key registered with the given callback, or every watch on
+     * the key when no callback is given. The callback is found by identity: the same closure, or
+     * the same `[$object, 'method']`.
+     *
+     * @param string $configKey The config key to stop watching.
+     * @param callable|null $callback The callback of the watch to remove. Every watch on the key is
+     *     removed when left out.
+     */
+    public function unwatch(string $configKey, ?callable $callback = null): void;
+
+    /**
+     * Removes every watch on every config key.
+     */
+    public function unwatchAll(): void;
+
+    /**
+     * Registers a handler for one of the events the client emits. A handler registered twice is
+     * called twice.
+     *
+     * - `clientReady`: called with no argument when the client first receives values and becomes
+     *   ready.
+     * - `configsUpdated`: called with a {@see ConfigsUpdatedEvent} each time the client receives
+     *   values, the first time included.
+     * - `configEvaluated`: called with a {@see ConfigEvaluatedEvent} each time {@see getValue()},
+     *   {@see evaluate()} or a watch evaluates a config, before the read returns.
+     * - `connectionError`: called with a {@see ConnectionErrorEvent}. Nothing calls it yet: the
+     *   client does not connect to ConfigDirector yet.
+     *
+     * The client receives values during {@see initialize()}. Each time, it calls the
+     * `configsUpdated` handlers first, then the watches on the keys received or removed, then the
+     * `clientReady` handlers when the client has just become ready. Inside these handlers and
+     * watches the client is ready and reads return the values received. A handler that throws is
+     * logged at error level and ignored: the other handlers still run and the read returns its
+     * value.
+     *
+     * @param 'clientReady'|'configsUpdated'|'configEvaluated'|'connectionError' $eventName The event
+     *     to handle.
+     * @param callable $handler The handler to call.
+     *
+     * @throws ConfigDirectorValidationException When the event name is not one of the four above.
+     */
+    public function on(string $eventName, callable $handler): void;
+
+    /**
+     * Removes a handler registered for an event, or every handler of the event when no handler is
+     * given. The handler is found by identity: the same closure, or the same `[$object, 'method']`.
+     * When the handler was registered twice, one of its registrations is removed.
+     *
+     * @param 'clientReady'|'configsUpdated'|'configEvaluated'|'connectionError' $eventName The event
+     *     whose handler to remove.
+     * @param callable|null $handler The handler to remove. Every handler of the event is removed
+     *     when left out.
+     *
+     * @throws ConfigDirectorValidationException When the event name is not one of the events
+     *     {@see on()} lists.
+     */
+    public function off(string $eventName, ?callable $handler = null): void;
+
+    /**
+     * Disposes of the client. Afterwards the client is not ready, every read returns its in-code
+     * default value, and every handler, hook and watch is removed. It is safe to call more than
+     * once.
      */
     public function dispose(): void;
 }
