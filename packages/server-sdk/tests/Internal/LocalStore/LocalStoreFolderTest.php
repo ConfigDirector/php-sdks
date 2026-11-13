@@ -6,6 +6,7 @@ namespace ConfigDirector\Tests\Internal\LocalStore;
 
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
+use ConfigDirector\Internal\LocalStore\UnfilledStore;
 use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\TemporaryFolder;
@@ -190,7 +191,7 @@ final class LocalStoreFolderTest extends TestCase
         );
 
         self::assertSame(0, $fetches);
-        self::assertNull($filledPayload);
+        self::assertSame(UnfilledStore::UnusableAsItsErrorLineSays, $filledPayload);
     }
 
     public function testAStoragePathThatPhpIsNotAllowedToOpenIsNotUsedAndLogsOneErrorWithoutAPhpWarning(): void

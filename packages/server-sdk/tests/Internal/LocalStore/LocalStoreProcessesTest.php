@@ -48,7 +48,11 @@ final class LocalStoreProcessesTest extends TestCase
         self::assertSame('stored', $storingOutput);
         self::assertSame(
             [
-                'payload' => ['marker' => 'stored-by-the-first-process', 'padding' => str_repeat('x', 2_000_000)],
+                'payload' => [
+                    'configs' => [],
+                    'marker' => 'stored-by-the-first-process',
+                    'padding' => str_repeat('x', 2_000_000),
+                ],
                 'confirmedFreshAtEpochMilliseconds' => 1_794_477_600_123,
                 'sessionId' => 'session-of-stored-by-the-first-process',
                 'errorsLogged' => 0,
@@ -132,7 +136,11 @@ final class LocalStoreProcessesTest extends TestCase
             static function () use (&$fetches): StoredPayload {
                 $fetches++;
 
-                return new StoredPayload(['marker' => 'fetched-by-the-waiting-process'], 2_000, 'session-2');
+                return new StoredPayload(
+                    ['configs' => [], 'marker' => 'fetched-by-the-waiting-process'],
+                    2_000,
+                    'session-2',
+                );
             },
         );
         $holdingProcess->finished();
@@ -140,7 +148,7 @@ final class LocalStoreProcessesTest extends TestCase
         self::assertSame('locked', $lineOfTheHolder);
         self::assertSame(0, $fetches);
         self::assertEquals(
-            new StoredPayload(['marker' => 'stored-by-the-holder'], 1_000, 'session-1'),
+            new StoredPayload(['configs' => [], 'marker' => 'stored-by-the-holder'], 1_000, 'session-1'),
             $filledPayload,
         );
     }
@@ -148,7 +156,9 @@ final class LocalStoreProcessesTest extends TestCase
     #[RequiresOperatingSystem('Linux|Darwin')]
     public function testAProcessKilledWhileStoringAPayloadLeavesThePreviousPayloadReadable(): void
     {
-        $this->storeInThisProcess(new StoredPayload(['marker' => 'stored-before-the-kill'], 1_000, 'session-1'));
+        $this->storeInThisProcess(
+            new StoredPayload(['configs' => [], 'marker' => 'stored-before-the-kill'], 1_000, 'session-1'),
+        );
 
         $killedProcess = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
@@ -160,7 +170,7 @@ final class LocalStoreProcessesTest extends TestCase
         self::assertSame(self::SIGNAL_OF_A_WRITE_PAST_THE_FILE_SIZE_LIMIT, $killedProcess->terminatingSignal);
         self::assertSame('', $killedProcess->output);
         self::assertEquals(
-            new StoredPayload(['marker' => 'stored-before-the-kill'], 1_000, 'session-1'),
+            new StoredPayload(['configs' => [], 'marker' => 'stored-before-the-kill'], 1_000, 'session-1'),
             LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger)->storedPayload(),
         );
         self::assertSame([], $logger->contextsLoggedAt(LogLevel::ERROR));
@@ -169,19 +179,23 @@ final class LocalStoreProcessesTest extends TestCase
     #[RequiresOperatingSystem('Linux|Darwin')]
     public function testAfterAProcessWasKilledWhileStoringAPayloadTheNextPayloadIsStored(): void
     {
-        $this->storeInThisProcess(new StoredPayload(['marker' => 'stored-before-the-kill'], 1_000, 'session-1'));
+        $this->storeInThisProcess(
+            new StoredPayload(['configs' => [], 'marker' => 'stored-before-the-kill'], 1_000, 'session-1'),
+        );
         $killedProcess = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
             [$this->storagePath, 'server-sdk-key', 'never-stored', '4000000'],
             commandPrefix: self::SMALLEST_FILE_SIZE_LIMIT_OF_THE_SHELL,
         )->finished();
 
-        $this->storeInThisProcess(new StoredPayload(['marker' => 'stored-after-the-kill'], 2_000, 'session-1'));
+        $this->storeInThisProcess(
+            new StoredPayload(['configs' => [], 'marker' => 'stored-after-the-kill'], 2_000, 'session-1'),
+        );
 
         self::assertSame(self::SIGNAL_OF_A_WRITE_PAST_THE_FILE_SIZE_LIMIT, $killedProcess->terminatingSignal);
 
         self::assertEquals(
-            new StoredPayload(['marker' => 'stored-after-the-kill'], 2_000, 'session-1'),
+            new StoredPayload(['configs' => [], 'marker' => 'stored-after-the-kill'], 2_000, 'session-1'),
             LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger())->storedPayload(),
         );
         self::assertSame(
@@ -194,7 +208,9 @@ final class LocalStoreProcessesTest extends TestCase
 
     public function testAProcessReadingWhileAnotherKeepsReplacingThePayloadAlwaysReadsAWholePayload(): void
     {
-        $this->storeInThisProcess(new StoredPayload(['padding' => str_repeat('a', 300_000)], 0, 'session-1'));
+        $this->storeInThisProcess(
+            new StoredPayload(['configs' => [], 'padding' => str_repeat('a', 300_000)], 0, 'session-1'),
+        );
         $logger = new RecordingLogger();
         $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger);
 
@@ -219,7 +235,9 @@ final class LocalStoreProcessesTest extends TestCase
 
     public function testAPayloadLargerThan32MebibytesIsNotStoredAndThePreviousPayloadStays(): void
     {
-        $this->storeInThisProcess(new StoredPayload(['marker' => 'stored-before'], 1_000, 'session-1'));
+        $this->storeInThisProcess(
+            new StoredPayload(['configs' => [], 'marker' => 'stored-before'], 1_000, 'session-1'),
+        );
 
         $output = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
@@ -229,7 +247,7 @@ final class LocalStoreProcessesTest extends TestCase
 
         self::assertSame('not-stored', $output);
         self::assertEquals(
-            new StoredPayload(['marker' => 'stored-before'], 1_000, 'session-1'),
+            new StoredPayload(['configs' => [], 'marker' => 'stored-before'], 1_000, 'session-1'),
             LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger())->storedPayload(),
         );
     }

@@ -39,12 +39,13 @@ final readonly class ClientHooks
      * @param (callable(): void)|list<callable(): void>|null $clientReady Called with no argument
      *     when the client first receives values and becomes ready.
      * @param (callable(ConfigsUpdatedEvent): void)|list<callable(ConfigsUpdatedEvent): void>|null $configsUpdated
-     *     Called each time the client receives values, the first time included.
+     *     Called each time the client receives values that are new or changed, the first time
+     *     included.
      * @param (callable(ConfigEvaluatedEvent): void)|list<callable(ConfigEvaluatedEvent): void>|null $configEvaluated
      *     Called each time a config is evaluated, before the read returns.
      * @param (callable(ConnectionErrorEvent): void)|list<callable(ConnectionErrorEvent): void>|null $connectionError
-     *     Called with a {@see ConnectionErrorEvent}. Nothing calls it yet: the client does not
-     *     connect to ConfigDirector yet.
+     *     Called with a {@see ConnectionErrorEvent} when ConfigDirector refuses a request with a
+     *     4xx status other than 429.
      */
     public function __construct(
         callable|array|null $clientReady = null,

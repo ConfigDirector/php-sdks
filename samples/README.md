@@ -22,8 +22,6 @@ composer install
 php -S 127.0.0.1:3700 -t public
 ```
 
-> The SDK does not connect to ConfigDirector yet, so every sample evaluates the same sample configs
-> built into the SDK, whatever key it is given. Once it connects, the samples will need a real
-> server SDK key to resolve configs. Without one the client will stay not ready and every config
-> will fall back to the in-code default value the sample passes in, which is also what a production
-> app sees when it has no values from ConfigDirector.
+> The samples need a real server SDK key to resolve configs. Without one the client stays not
+> ready and every config falls back to the in-code default value the sample passes in, which is
+> also what a production app sees when it has no values from ConfigDirector.

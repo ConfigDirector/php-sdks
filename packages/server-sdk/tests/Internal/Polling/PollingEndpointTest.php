@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Tests\Internal\Polling;
 
+use ConfigDirector\Internal\Identity\SdkIdentity;
 use ConfigDirector\Internal\Polling\PollAnswerKind;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Metadata;
@@ -27,7 +28,7 @@ final class PollingEndpointTest extends TestCase
         $this->server = ScriptedSdkServer::answering([
             ['status' => 200, 'body' => ['kind' => 'full', 'configs' => []], 'delayMilliseconds' => 1_500],
         ]);
-        $endpoint = new PollingEndpoint($this->server->url, 'server-sdk-key', new Metadata());
+        $endpoint = self::endpointOf($this->server->url);
 
         $answer = $endpoint->answerToAPoll('session-1', null, 300);
 
@@ -37,7 +38,7 @@ final class PollingEndpointTest extends TestCase
     public function testAPollWhoseConnectionIsClosedWithoutAnAnswerIsAnsweredAsUnanswered(): void
     {
         $this->server = ScriptedSdkServer::answering([['closes' => 'before-answering']]);
-        $endpoint = new PollingEndpoint($this->server->url, 'server-sdk-key', new Metadata());
+        $endpoint = self::endpointOf($this->server->url);
 
         $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
 
@@ -50,7 +51,7 @@ final class PollingEndpointTest extends TestCase
         $urlNothingListensOn = $this->server->url;
         $this->server->stop();
         $this->server = null;
-        $endpoint = new PollingEndpoint($urlNothingListensOn, 'server-sdk-key', new Metadata());
+        $endpoint = self::endpointOf($urlNothingListensOn);
 
         $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
 
@@ -59,7 +60,7 @@ final class PollingEndpointTest extends TestCase
 
     public function testAPollOfAHostThatDoesNotResolveIsAnsweredAsUnanswered(): void
     {
-        $endpoint = new PollingEndpoint('http://sdk-server.invalid', 'server-sdk-key', new Metadata());
+        $endpoint = self::endpointOf('http://sdk-server.invalid');
 
         $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
 
@@ -71,7 +72,7 @@ final class PollingEndpointTest extends TestCase
     public function testAServerWhoseCertificateIsNotTrustedIsSentNoPoll(): void
     {
         $this->server = ScriptedSdkServer::answeringOverTlsWithASelfSignedCertificate([['status' => 204]]);
-        $endpoint = new PollingEndpoint($this->server->url, 'server-sdk-key', new Metadata());
+        $endpoint = self::endpointOf($this->server->url);
 
         $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
 
@@ -82,10 +83,15 @@ final class PollingEndpointTest extends TestCase
     public function testABaseUrlWithAProxyPathKeepsThePathBeforeThePollingPath(): void
     {
         $this->server = ScriptedSdkServer::answering([['status' => 204]]);
-        $endpoint = new PollingEndpoint($this->server->url . '/configdirector/', 'server-sdk-key', new Metadata());
+        $endpoint = self::endpointOf($this->server->url . '/configdirector/');
 
         $endpoint->answerToAPoll('session-1', null, 3_000);
 
         self::assertSame('/configdirector/server/polling/v1', $this->server->requestsReceived()[0]['path']);
+    }
+
+    private static function endpointOf(string $baseUrl): PollingEndpoint
+    {
+        return new PollingEndpoint($baseUrl, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk());
     }
 }

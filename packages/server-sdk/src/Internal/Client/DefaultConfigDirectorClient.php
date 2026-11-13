@@ -6,12 +6,12 @@ namespace ConfigDirector\Internal\Client;
 
 use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConfigEvaluation;
-use ConfigDirector\ConfigsUpdatedEvent;
 use ConfigDirector\Context;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Internal\Connection\ConfigDefinition;
 use ConfigDirector\Internal\Connection\Connection;
 use ConfigDirector\Internal\Connection\ServerSdkPayload;
+use ConfigDirector\Internal\Connection\UndeliveredPayload;
 use ConfigDirector\Internal\Evaluation\ConfigEvaluator;
 use ConfigDirector\Internal\Evaluation\EvaluationContext;
 use ConfigDirector\Internal\Evaluation\ServedBy;
@@ -63,13 +63,20 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             return;
         }
 
-        $payload = $this->connection->payloadDeliveredWithin($this->timeoutMilliseconds);
-        if ($payload === null) {
-            $this->logger->warning(
-                '[ConfigDirectorClient] Timed out waiting for initialization after {timeout}ms. '
-                . 'Configs return the in-code default value until values arrive.',
-                ['timeout' => $this->timeoutMilliseconds],
-            );
+        $payload = $this->connection->payloadForInitialization();
+        if ($payload instanceof UndeliveredPayload) {
+            match ($payload) {
+                UndeliveredPayload::WaitReachedTheTimeout => $this->logger->warning(
+                    '[ConfigDirectorClient] Timed out waiting for initialization after {timeout}ms. '
+                    . 'Configs return the in-code default value until values arrive.',
+                    ['timeout' => $this->timeoutMilliseconds],
+                ),
+                UndeliveredPayload::FailedPollOnRecord => $this->logger->debug(
+                    '[ConfigDirectorClient] initialize() did not wait for values because a failed poll is on '
+                    . 'record. Configs return the in-code default value until values arrive.',
+                ),
+                UndeliveredPayload::ReasonLoggedAsAnError => null,
+            };
 
             return;
         }
@@ -81,6 +88,8 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     #[\Override]
     public function isReady(): bool
     {
+        $this->takeInThePayloadFoundByThisRead();
+
         return $this->payload !== null;
     }
 
@@ -96,12 +105,16 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     #[\Override]
     public function evaluate(string $configKey, mixed $defaultValue, ?Context $context = null): ConfigEvaluation
     {
-        return $this->read($configKey, InCodeDefaultValue::from($defaultValue), $context);
+        $inCodeDefaultValue = InCodeDefaultValue::from($defaultValue);
+        $this->takeInThePayloadFoundByThisRead();
+
+        return $this->read($configKey, $inCodeDefaultValue, $context);
     }
 
     #[\Override]
     public function getAllConfigs(?Context $context = null, ?array $configKeys = null): array
     {
+        $this->takeInThePayloadFoundByThisRead();
         $admittedContext = $this->admittedContextOrNone($context);
         if ($this->payload === null) {
             return [];
@@ -252,14 +265,23 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         return $evaluation;
     }
 
+    private function takeInThePayloadFoundByThisRead(): void
+    {
+        $payload = $this->disposed ? null : $this->connection->payloadFoundByARead();
+        if ($payload !== null) {
+            $this->takeIn($payload);
+        }
+    }
+
     private function takeIn(ServerSdkPayload $payload): void
     {
-        $update = new ConfigsUpdatedEvent(
-            $payload->configKeys(),
-            $this->payload?->configKeysAbsentFrom($payload) ?? [],
-        );
+        $update = $payload->configsUpdatedSince($this->payload);
         $becomesReady = $this->payload === null;
         $this->payload = $payload;
+        if (!$becomesReady && $update->keys === [] && $update->removedKeys === []) {
+            return;
+        }
+
         $this->eventHandlers->deliverConfigsUpdated($update);
         $this->deliverToTheWatchesOn([...$update->keys, ...$update->removedKeys]);
         if ($becomesReady) {

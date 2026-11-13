@@ -6,13 +6,14 @@ use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConnectionErrorEvent;
 use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
 use ConfigDirector\Internal\Client\EventHandlers;
+use ConfigDirector\Internal\Connection\LocalStoreConnection;
+use ConfigDirector\Internal\Identity\SdkIdentity;
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\SettableClock;
-use ConfigDirector\Tests\Support\TransportConnection;
 use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 
@@ -39,7 +40,7 @@ $logger = new class extends AbstractLogger {
 $eventHandlers = new EventHandlers($logger);
 $transport = new PollingTransport(
     LocalStore::ofServerSdkKey('server-sdk-key', $storagePath, $logger),
-    new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata()),
+    new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
     PollingInterval::ofConfiguredSeconds(60),
     3_000,
     30_000,
@@ -48,9 +49,10 @@ $transport = new PollingTransport(
     static function (ConfigDirectorConnectionException $error) use ($eventHandlers): void {
         $eventHandlers->deliverConnectionError($error);
     },
+    static function (): void {},
 );
 $client = new DefaultConfigDirectorClient(
-    new TransportConnection($transport),
+    new LocalStoreConnection(static fn(): PollingTransport => $transport, $logger),
     new Metadata(),
     3_000,
     $logger,

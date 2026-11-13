@@ -13,10 +13,16 @@ namespace ConfigDirector;
 interface ConfigDirectorClient
 {
     /**
-     * Gets the values ConfigDirector serves and makes the client ready. It waits up to the
-     * connection timeout. When no values arrive in time it logs a warning and returns, and every
-     * read returns its in-code default value until values arrive. On a disposed client it logs a
-     * warning and the client stays not ready.
+     * Reads the values ConfigDirector serves and makes the client ready. The SDK keeps the values
+     * in a local store on this host, shared by its PHP processes, so most calls read them from
+     * there without connecting to ConfigDirector. When the local store holds none yet, this call
+     * asks ConfigDirector for them and waits up to the connection timeout, and a request that
+     * arrives meanwhile waits for that same answer.
+     *
+     * When it returns without values, every read returns its in-code default value until values
+     * arrive. It logs a warning when the wait reached the timeout, and nothing more when an
+     * error already logged says why, such as a request ConfigDirector refused. On a disposed
+     * client it logs a warning and the client stays not ready.
      */
     public function initialize(): void;
 
@@ -89,10 +95,11 @@ interface ConfigDirectorClient
 
     /**
      * Watches a config. The callback is called with the config's value each time the client
-     * receives values that include the config, whether or not the value changed, and with the
-     * in-code default value when the config is removed. It is not called when the watch is
-     * registered. The client receives values during {@see initialize()}, so a watch registered
-     * before it receives the value during it.
+     * receives values in which the config is new or changed, whether or not the value changed for
+     * this context, and with the in-code default value when the config is removed. It is not
+     * called when the watch is registered. The client receives values during {@see initialize()},
+     * so a watch registered before it receives the value during it. {@see on()} says when else
+     * the client receives values.
      *
      * Each value is evaluated as {@see getValue()} evaluates it and fires `configEvaluated`. A
      * callback that throws is logged at error level and ignored: the other watches still run.
@@ -140,18 +147,23 @@ interface ConfigDirectorClient
      * - `clientReady`: called with no argument when the client first receives values and becomes
      *   ready.
      * - `configsUpdated`: called with a {@see ConfigsUpdatedEvent} each time the client receives
-     *   values, the first time included.
+     *   values that are new or changed, the first time included.
      * - `configEvaluated`: called with a {@see ConfigEvaluatedEvent} each time {@see getValue()},
      *   {@see evaluate()} or a watch evaluates a config, before the read returns.
-     * - `connectionError`: called with a {@see ConnectionErrorEvent}. Nothing calls it yet: the
-     *   client does not connect to ConfigDirector yet.
+     * - `connectionError`: called with a {@see ConnectionErrorEvent} when ConfigDirector refuses
+     *   a request with a 4xx status other than 429, for example because the server SDK key is
+     *   wrong. The SDK then does not ask ConfigDirector again for one hour. It is called in the
+     *   process that sent the request: during {@see initialize()}, when the client is disposed
+     *   of, or during a read of a long-lived client.
      *
-     * The client receives values during {@see initialize()}. Each time, it calls the
-     * `configsUpdated` handlers first, then the watches on the keys received or removed, then the
-     * `clientReady` handlers when the client has just become ready. Inside these handlers and
-     * watches the client is ready and reads return the values received. A handler that throws is
-     * logged at error level and ignored: the other handlers still run and the read returns its
-     * value.
+     * The client receives values during {@see initialize()}. A long-lived client, one that has
+     * lived longer than the telemetry flush interval as in a queue worker, also looks at the local
+     * store during a read, at most once a second, and receives the values that changed there.
+     * Each time, it calls the `configsUpdated` handlers first, then the watches on the keys the
+     * event names, then the `clientReady` handlers when the client has just become ready. Inside
+     * these handlers and watches the client is ready and reads return the values received. A
+     * handler that throws is logged at error level and ignored: the other handlers still run and
+     * the read returns its value.
      *
      * @param 'clientReady'|'configsUpdated'|'configEvaluated'|'connectionError' $eventName The event
      *     to handle.

@@ -17,6 +17,8 @@ $refreshLock = LocalStore::ofServerSdkKey($serverSdkKey, $storagePath, new NullL
 echo $refreshLock === null ? "not-locked\n" : "locked\n";
 
 usleep((int) $millisecondsBeforeStoring * 1_000);
-$refreshLock?->replaceStoredPayload(new StoredPayload(['marker' => 'stored-by-the-holder'], 1_000, 'session-1'));
+$refreshLock?->replaceStoredPayload(
+    new StoredPayload(['configs' => [], 'marker' => 'stored-by-the-holder'], 1_000, 'session-1'),
+);
 usleep((int) $millisecondsAfterStoring * 1_000);
 $refreshLock?->release();

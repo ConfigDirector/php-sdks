@@ -18,9 +18,15 @@ require $autoloadFile;
 
 $connection = new class implements Connection {
     #[Override]
-    public function payloadDeliveredWithin(int $timeoutMilliseconds): ServerSdkPayload
+    public function payloadForInitialization(): ServerSdkPayload
     {
         return new ServerSdkPayload([], []);
+    }
+
+    #[Override]
+    public function payloadFoundByARead(): null
+    {
+        return null;
     }
 
     #[Override]

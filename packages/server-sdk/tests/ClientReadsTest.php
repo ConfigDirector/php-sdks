@@ -12,10 +12,10 @@ use ConfigDirector\Context;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\RecordingLogger;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use ConfigDirector\Variation;
-use PHPUnit\Framework\TestCase;
 
-final class ClientReadsTest extends TestCase
+final class ClientReadsTest extends SampleConfigsTestCase
 {
     public function testABooleanConfigReturnsTheServedBoolean(): void
     {
@@ -152,6 +152,7 @@ final class ClientReadsTest extends TestCase
     {
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             metadata: new Metadata(appName: 'beta-app'),
             logger: new RecordingLogger(),
         );
@@ -237,7 +238,11 @@ final class ClientReadsTest extends TestCase
 
     public function testAReadBeforeInitializeReturnsTheInCodeDefaultValue(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $evaluation = $client->evaluate('integer-config', 10);
 
@@ -380,7 +385,11 @@ final class ClientReadsTest extends TestCase
 
     private static function readyClient(): ConfigDirectorClient
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
 
         return $client;

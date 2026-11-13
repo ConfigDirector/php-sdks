@@ -9,15 +9,19 @@ use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\Context;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Tests\Support\RecordingLogger;
-use PHPUnit\Framework\TestCase;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use Psr\Log\LogLevel;
 
-final class ClientContextKindTest extends TestCase
+final class ClientContextKindTest extends SampleConfigsTestCase
 {
     public function testAContextOfACustomKindIsEvaluated(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
         $proDevice = new Context(id: 'device-1', kind: 'device', traits: ['plan' => 'pro']);
 
@@ -41,7 +45,11 @@ final class ClientContextKindTest extends TestCase
     public function testAContextWithAnInvalidKindIsIgnoredWhole(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
 
         $evaluation = $client->evaluate(
@@ -67,7 +75,11 @@ final class ClientContextKindTest extends TestCase
     public function testAContextWithAnInvalidKindLogsOneErrorNamingTheKind(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
 
         $client->getValue('day-of-the-week-config', 'Friday', new Context(id: 'device-1', kind: 'Device'));
@@ -77,7 +89,11 @@ final class ClientContextKindTest extends TestCase
 
     public function testAnInCodeDefaultValueReturnedForAnIgnoredContextCarriesNoContext(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
 
         $evaluation = $client->evaluate('no-such-config', 'fallback', new Context(id: 'device-1', kind: 'Device'));
@@ -98,7 +114,11 @@ final class ClientContextKindTest extends TestCase
 
     public function testAnIgnoredContextSkipsThePercentageRollout(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
 
         $evaluation = $client->evaluate('temporary-feature-flag', true, new Context(id: 'device-1', kind: 'Device'));
@@ -110,7 +130,11 @@ final class ClientContextKindTest extends TestCase
     public function testAnEmptyKindIsInvalid(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
 
         $evaluation = $client->evaluate('integer-config', 10, new Context(id: 'user-123', kind: ''));
@@ -122,7 +146,11 @@ final class ClientContextKindTest extends TestCase
     public function testAKindOfSixtyFourCharactersIsValid(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
         $context = new Context(id: 'tenant-1', kind: str_repeat('k', 64));
 
@@ -134,7 +162,11 @@ final class ClientContextKindTest extends TestCase
 
     public function testAKindOfSixtyFiveCharactersIsInvalid(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
         $context = new Context(id: 'tenant-1', kind: str_repeat('k', 65));
 
@@ -146,7 +178,11 @@ final class ClientContextKindTest extends TestCase
     public function testTheSameInvalidKindIsLoggedOnce(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
 
         $client->getValue('integer-config', 10, new Context(id: 'device-1', kind: 'Device'));
@@ -158,7 +194,11 @@ final class ClientContextKindTest extends TestCase
     public function testEachDifferentInvalidKindIsLogged(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
 
         $client->getValue('integer-config', 10, new Context(id: 'device-1', kind: 'Device'));
@@ -173,7 +213,11 @@ final class ClientContextKindTest extends TestCase
     public function testInvalidKindsBeyondTwentyAreLoggedOnceTogether(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
         foreach (range(1, 20) as $number) {
             $client->getValue('integer-config', 10, new Context(kind: 'Kind' . $number));
@@ -191,7 +235,11 @@ final class ClientContextKindTest extends TestCase
     public function testTheErrorNamesOnlyTheFirstCharactersOfAVeryLongKind(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
 
         $client->getValue('integer-config', 10, new Context(kind: str_repeat('é', 200)));

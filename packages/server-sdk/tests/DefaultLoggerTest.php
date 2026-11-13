@@ -10,10 +10,10 @@ use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\Context;
 use ConfigDirector\Tests\Support\RecordingLogger;
-use PHPUnit\Framework\TestCase;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use Psr\Log\LogLevel;
 
-final class DefaultLoggerTest extends TestCase
+final class DefaultLoggerTest extends SampleConfigsTestCase
 {
     public function testAWarningIsWrittenThroughErrorLog(): void
     {
@@ -27,7 +27,10 @@ final class DefaultLoggerTest extends TestCase
 
     public function testAnErrorIsWrittenThroughErrorLog(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key');
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+        );
         $client->initialize();
 
         $this->expectOutputRegex('/^\[ConfigDirector:php-server-sdk\] error: [^\r\n{]*Device[^\r\n{]*\R$/');
@@ -37,7 +40,10 @@ final class DefaultLoggerTest extends TestCase
 
     public function testDebugMessagesAreNotWrittenByDefault(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key');
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+        );
         $client->initialize();
 
         $this->expectOutputString('');
@@ -47,7 +53,11 @@ final class DefaultLoggerTest extends TestCase
 
     public function testTheDebugLogLevelWritesDebugMessages(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logLevel: LogLevel::DEBUG);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::DEBUG,
+        );
         $client->initialize();
 
         $this->expectOutputRegex(
@@ -59,7 +69,11 @@ final class DefaultLoggerTest extends TestCase
 
     public function testADebugMessageShowsAnArrayValueAsJson(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logLevel: LogLevel::DEBUG);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::DEBUG,
+        );
         $client->initialize();
 
         $this->expectOutputRegex('/' . preg_quote('{"greeting":"hello","sizes":[1,2]}', '/') . '[^\r\n]*\R$/');
@@ -80,7 +94,11 @@ final class DefaultLoggerTest extends TestCase
 
     public function testTheErrorLogLevelStillWritesErrors(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logLevel: LogLevel::ERROR);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::ERROR,
+        );
         $client->initialize();
 
         $this->expectOutputRegex('/^\[ConfigDirector:php-server-sdk\] error: [^\r\n]*\R$/');
@@ -90,7 +108,10 @@ final class DefaultLoggerTest extends TestCase
 
     public function testALineBreakInAnInvalidKindStaysOnOneLine(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key');
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+        );
         $client->initialize();
 
         $this->expectOutputRegex('/^[^\r\n]*Device {2}forged line[^\r\n]*\R$/');
@@ -102,6 +123,7 @@ final class DefaultLoggerTest extends TestCase
     {
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             hooks: new ClientHooks(configEvaluated: static function (): void {
                 throw new \RuntimeException('The handler failed');
             }),
@@ -119,6 +141,7 @@ final class DefaultLoggerTest extends TestCase
     {
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             hooks: new ClientHooks(configEvaluated: static function (): void {
                 throw new \RuntimeException("The handler failed\r\nforged line");
             }),
@@ -134,7 +157,11 @@ final class DefaultLoggerTest extends TestCase
     {
         $this->expectException(ConfigDirectorValidationException::class);
 
-        ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logLevel: 'warn');
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: 'warn',
+        );
     }
 
     public function testTheLogLevelHasNoEffectWhenALoggerIsGiven(): void

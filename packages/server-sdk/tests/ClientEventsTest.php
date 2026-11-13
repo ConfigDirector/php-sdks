@@ -12,17 +12,18 @@ use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigsUpdatedEvent;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Tests\Support\RecordingLogger;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
-use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
-final class ClientEventsTest extends TestCase
+final class ClientEventsTest extends SampleConfigsTestCase
 {
     public function testAHookReceivesClientReadyDuringInitialize(): void
     {
         $readyCount = 0;
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(clientReady: function () use (&$readyCount): void {
                 $readyCount++;
@@ -37,7 +38,11 @@ final class ClientEventsTest extends TestCase
     public function testAnOnHandlerReceivesClientReadyDuringInitialize(): void
     {
         $readyCount = 0;
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->on('clientReady', function () use (&$readyCount): void {
             $readyCount++;
         });
@@ -50,7 +55,11 @@ final class ClientEventsTest extends TestCase
     public function testAClientReadyHandlerReceivesNoArgument(): void
     {
         $argumentCounts = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->on('clientReady', function () use (&$argumentCounts): void {
             $argumentCounts[] = func_num_args();
         });
@@ -63,7 +72,11 @@ final class ClientEventsTest extends TestCase
     public function testClientReadyFiresOnlyWhenTheClientBecomesReady(): void
     {
         $readyCount = 0;
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->on('clientReady', function () use (&$readyCount): void {
             $readyCount++;
         });
@@ -77,7 +90,11 @@ final class ClientEventsTest extends TestCase
     public function testAConfigsUpdatedHandlerReadsTheValuesReceived(): void
     {
         $valuesRead = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->on('configsUpdated', function () use ($client, &$valuesRead): void {
             $valuesRead[] = $client->getValue('integer-config', 10);
         });
@@ -90,7 +107,11 @@ final class ClientEventsTest extends TestCase
     public function testOffWithAHandlerRemovesOnlyThatHandler(): void
     {
         $calls = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $first = function () use (&$calls): void {
             $calls[] = 'first';
         };
@@ -108,7 +129,11 @@ final class ClientEventsTest extends TestCase
     public function testOffRemovesOneRegistrationOfAHandlerRegisteredTwice(): void
     {
         $readyCount = 0;
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $countReady = function () use (&$readyCount): void {
             $readyCount++;
         };
@@ -124,7 +149,11 @@ final class ClientEventsTest extends TestCase
     public function testOffWithoutAHandlerRemovesEveryHandlerOfTheEvent(): void
     {
         $calls = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->on('clientReady', function () use (&$calls): void {
             $calls[] = 'first clientReady';
         });
@@ -153,6 +182,7 @@ final class ClientEventsTest extends TestCase
         };
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(clientReady: [$recorder, 'recordReady']),
         );
@@ -168,6 +198,7 @@ final class ClientEventsTest extends TestCase
         $readyCount = 0;
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: $logger,
             hooks: new ClientHooks(
                 // @phpstan-ignore argument.type
@@ -192,14 +223,22 @@ final class ClientEventsTest extends TestCase
     #[DoesNotPerformAssertions]
     public function testOnAcceptsConnectionError(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $client->on('connectionError', static function (): void {});
     }
 
     public function testOnRejectsAnUnknownEventName(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $this->expectException(ConfigDirectorValidationException::class);
 
@@ -209,7 +248,11 @@ final class ClientEventsTest extends TestCase
 
     public function testOffRejectsAnUnknownEventName(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $this->expectException(ConfigDirectorValidationException::class);
 
@@ -222,6 +265,7 @@ final class ClientEventsTest extends TestCase
         $updates = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configsUpdated: function (ConfigsUpdatedEvent $update) use (&$updates): void {
                 $updates[] = $update;
@@ -255,6 +299,7 @@ final class ClientEventsTest extends TestCase
         $evaluations = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
                 $evaluations[] = $event->evaluation;
@@ -285,6 +330,7 @@ final class ClientEventsTest extends TestCase
         $evaluations = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
                 $evaluations[] = $event->evaluation;
@@ -302,6 +348,7 @@ final class ClientEventsTest extends TestCase
         $evaluations = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
                 $evaluations[] = $event->evaluation;
@@ -322,6 +369,7 @@ final class ClientEventsTest extends TestCase
         $evaluations = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
                 $evaluations[] = $event->evaluation;
@@ -340,6 +388,7 @@ final class ClientEventsTest extends TestCase
         $exception = new \RuntimeException('The handler failed');
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: $logger,
             hooks: new ClientHooks(configEvaluated: static function () use ($exception): void {
                 throw $exception;
@@ -361,6 +410,7 @@ final class ClientEventsTest extends TestCase
         $calls = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(
                 clientReady: function () use (&$calls): void {
@@ -388,6 +438,7 @@ final class ClientEventsTest extends TestCase
         $evaluations = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
                 $evaluations[] = $event->evaluation;

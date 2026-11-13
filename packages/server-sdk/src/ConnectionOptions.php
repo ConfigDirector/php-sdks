@@ -14,17 +14,19 @@ final readonly class ConnectionOptions
      * @param int $pollingInterval The polling interval in seconds. Defaults to 300 seconds (5
      *     minutes). The minimum is 60 seconds. A value below the minimum is raised to the minimum
      *     and a warning is logged. This option has no effect in offline mode.
-     * @param int $timeout The time `initialize()` waits for values, in milliseconds. Defaults to
-     *     3,000 milliseconds (3 seconds).
+     * @param int $timeout The time `initialize()` waits for values, in milliseconds, which is also
+     *     the most a request to ConfigDirector may take. Defaults to 3,000 milliseconds (3
+     *     seconds).
      * @param string $url The base URL of the ConfigDirector SDK server. To be used only when
      *     routing through a proxy to connect to it. This option has no effect in offline mode.
      * @param string|null $file The path of a JSON file holding the values to serve in offline mode.
      * @param array<string, mixed>|null $values The values to serve in offline mode, keyed by config
      *     key.
      * @param string|null $storagePath The folder in which the SDK keeps the values it received, in
-     *     a folder of its own for each server SDK key. Defaults to a folder in the system temp
-     *     directory that belongs to the system user running PHP. On Linux and macOS, only that
-     *     user can read what the SDK writes there.
+     *     a folder of its own for each server SDK key, as an absolute path. Defaults to a folder
+     *     in the system temp directory that belongs to the system user running PHP. On Linux and
+     *     macOS, only that user can read what the SDK writes there. This option has no effect in
+     *     offline mode.
      */
     public function __construct(
         public ConnectionMode $mode = ConnectionMode::Polling,

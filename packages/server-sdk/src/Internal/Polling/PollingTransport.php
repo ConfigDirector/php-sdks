@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace ConfigDirector\Internal\Polling;
 
 use ConfigDirector\ConfigDirectorConnectionException;
+use ConfigDirector\Internal\Connection\UndeliveredPayload;
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\PollingPause;
 use ConfigDirector\Internal\LocalStore\RefreshLock;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
+use ConfigDirector\Internal\LocalStore\UnfilledStore;
 use ConfigDirector\Internal\Time\Clock;
 use Psr\Log\LoggerInterface;
 
@@ -16,14 +18,19 @@ final class PollingTransport
 {
     private const int ONE_HOUR_MILLISECONDS = 3_600_000;
 
+    private const int MILLISECONDS_BETWEEN_LOOKS_AT_THE_STORE = 1_000;
+
     private readonly int $createdAtMonotonicMilliseconds;
 
     private ?int $pollDueAtMonotonicMilliseconds = null;
+
+    private ?int $lookedAtTheStoreAtMonotonicMilliseconds = null;
 
     private bool $isClosed = false;
 
     /**
      * @param \Closure(ConfigDirectorConnectionException): void $reportUnrecoverableError
+     * @param \Closure(StoredPayload): void $reportPayloadReceivedByAPoll
      */
     public function __construct(
         private readonly LocalStore $store,
@@ -34,11 +41,12 @@ final class PollingTransport
         private readonly Clock $clock,
         private readonly LoggerInterface $logger,
         private readonly \Closure $reportUnrecoverableError,
+        private readonly \Closure $reportPayloadReceivedByAPoll,
     ) {
         $this->createdAtMonotonicMilliseconds = $clock->monotonicMilliseconds();
     }
 
-    public function storedPayloadForInitialization(): ?StoredPayload
+    public function storedPayloadForInitialization(): StoredPayload|UndeliveredPayload
     {
         $now = $this->clock->epochMilliseconds();
         $storedPayload = $this->store->storedPayload();
@@ -49,11 +57,11 @@ final class PollingTransport
         if ($storedPayload !== null || $isPausedAfterAFailedPoll) {
             $this->expectTheNextPollAt($this->epochMillisecondsThePollIsDue($storedPayload, $now));
 
-            return $storedPayload;
+            return $storedPayload ?? UndeliveredPayload::FailedPollOnRecord;
         }
 
         $pollAttempt = null;
-        $filledPayload = $this->store->storedPayloadFilledWithin(
+        $filledStore = $this->store->storedPayloadFilledWithin(
             $this->timeoutMilliseconds,
             function (int $remainingMilliseconds, RefreshLock $refreshLock) use (&$pollAttempt): ?StoredPayload {
                 $pollAttempt = $this->pollAttemptedUnder($refreshLock, null, $remainingMilliseconds);
@@ -64,42 +72,75 @@ final class PollingTransport
         if ($pollAttempt instanceof PollAttempt) {
             $this->expectTheNextPollAt($pollAttempt->nextPollDueAtEpochMilliseconds);
             $this->logAndReportTheFailureOf($pollAttempt);
-        } else {
-            $this->expectTheNextPollAt(
-                $this->epochMillisecondsThePollIsDue($filledPayload, $this->clock->epochMilliseconds()),
+            $this->reportThePayloadTheServerSent(
+                $pollAttempt,
+                $filledStore instanceof StoredPayload ? $filledStore : null,
             );
+        } else {
+            $this->expectTheNextPollAt($this->epochMillisecondsThePollIsDue(
+                $filledStore instanceof StoredPayload ? $filledStore : null,
+                $this->clock->epochMilliseconds(),
+            ));
+        }
+        if ($filledStore instanceof StoredPayload) {
+            return $filledStore;
         }
 
-        return $filledPayload;
+        $pollWasUnsentBecause = $pollAttempt instanceof PollAttempt ? $pollAttempt->unsentBecause : null;
+
+        return match ($filledStore) {
+            UnfilledStore::RefreshLockHeldPastTheTimeout => UndeliveredPayload::WaitReachedTheTimeout,
+            UnfilledStore::UnusableAsItsErrorLineSays => UndeliveredPayload::ReasonLoggedAsAnError,
+            UnfilledStore::NothingFetched => match ($pollWasUnsentBecause) {
+                UnsentPoll::NoTimeLeft => UndeliveredPayload::WaitReachedTheTimeout,
+                UnsentPoll::NotDue => UndeliveredPayload::FailedPollOnRecord,
+                UnsentPoll::PollingPauseNotRecorded => UndeliveredPayload::ReasonLoggedAsAnError,
+                null => UndeliveredPayload::ReasonLoggedAsAnError,
+            },
+        };
     }
 
-    public function pollWhenDueInALongRunningProcess(): void
+    public function storedPayloadFoundByAReadInALongRunningProcess(): ?StoredPayload
     {
-        $ageMilliseconds = $this->clock->monotonicMilliseconds() - $this->createdAtMonotonicMilliseconds;
-        if ($ageMilliseconds > $this->flushIntervalMilliseconds) {
-            $this->pollWhenDue();
+        $nowMonotonicMilliseconds = $this->clock->monotonicMilliseconds();
+        $ageMilliseconds = $nowMonotonicMilliseconds - $this->createdAtMonotonicMilliseconds;
+        $hasLookedAtTheStoreRecently = $this->lookedAtTheStoreAtMonotonicMilliseconds !== null
+            && $nowMonotonicMilliseconds - $this->lookedAtTheStoreAtMonotonicMilliseconds
+                < self::MILLISECONDS_BETWEEN_LOOKS_AT_THE_STORE;
+        if ($this->isClosed || $ageMilliseconds <= $this->flushIntervalMilliseconds || $hasLookedAtTheStoreRecently) {
+            return null;
         }
+
+        $this->lookedAtTheStoreAtMonotonicMilliseconds = $nowMonotonicMilliseconds;
+        $storedPayload = $this->store->storedPayload();
+        $now = $this->clock->epochMilliseconds();
+        $freshUntil = $storedPayload?->epochMillisecondsFreshUntil($this->pollingInterval->milliseconds(), $now) ?? 0;
+        if ($now < $freshUntil) {
+            $this->expectTheNextPollAt($freshUntil);
+        }
+
+        return $this->payloadStoredByThePollThatIsDue() ?? $storedPayload;
     }
 
     public function close(): void
     {
-        $this->pollWhenDue();
+        $this->payloadStoredByThePollThatIsDue();
         $this->isClosed = true;
     }
 
-    private function pollWhenDue(): void
+    private function payloadStoredByThePollThatIsDue(): ?StoredPayload
     {
         $isDue = $this->pollDueAtMonotonicMilliseconds !== null
             && $this->clock->monotonicMilliseconds() >= $this->pollDueAtMonotonicMilliseconds;
         if ($this->isClosed || !$isDue) {
-            return;
+            return null;
         }
 
         $refreshLock = $this->store->refreshLockAcquiredWithin(0);
         if ($refreshLock === null) {
             $this->expectTheNextPollAt($this->clock->epochMilliseconds() + $this->pollingInterval->milliseconds());
 
-            return;
+            return null;
         }
 
         try {
@@ -108,15 +149,26 @@ final class PollingTransport
                 $this->store->storedPayload(),
                 $this->timeoutMilliseconds,
             );
-            if ($pollAttempt->freshPayload !== null) {
-                $refreshLock->replaceStoredPayload($pollAttempt->freshPayload);
-            }
+            $payloadStored = $pollAttempt->freshPayload !== null
+                && $refreshLock->replaceStoredPayload($pollAttempt->freshPayload)
+                    ? $pollAttempt->freshPayload
+                    : null;
         } finally {
             $refreshLock->release();
         }
 
         $this->expectTheNextPollAt($pollAttempt->nextPollDueAtEpochMilliseconds);
         $this->logAndReportTheFailureOf($pollAttempt);
+        $this->reportThePayloadTheServerSent($pollAttempt, $payloadStored);
+
+        return $payloadStored;
+    }
+
+    private function reportThePayloadTheServerSent(PollAttempt $pollAttempt, ?StoredPayload $payloadStored): void
+    {
+        if ($payloadStored !== null && $pollAttempt->freshPayloadCameFromTheServer) {
+            ($this->reportPayloadReceivedByAPoll)($payloadStored);
+        }
     }
 
     private function expectTheNextPollAt(int $epochMilliseconds): void
@@ -143,8 +195,11 @@ final class PollingTransport
     ): PollAttempt {
         $now = $this->clock->epochMilliseconds();
         $pollDueAt = $this->epochMillisecondsThePollIsDue($storedPayload, $now);
-        if ($now < $pollDueAt || $timeLimitMilliseconds < 1) {
-            return new PollAttempt(null, $pollDueAt);
+        if ($timeLimitMilliseconds < 1) {
+            return PollAttempt::unsent(UnsentPoll::NoTimeLeft, $pollDueAt);
+        }
+        if ($now < $pollDueAt) {
+            return PollAttempt::unsent(UnsentPoll::NotDue, $pollDueAt);
         }
 
         $pollingIntervalMilliseconds = $this->pollingInterval->milliseconds();
@@ -159,7 +214,10 @@ final class PollingTransport
             null,
         );
         if (!$refreshLock->recordPollingPause($this->endpoint->url, $pauseWhileThePollIsUnanswered)) {
-            return new PollAttempt(null, $pauseWhileThePollIsUnanswered->untilEpochMilliseconds);
+            return PollAttempt::unsent(
+                UnsentPoll::PollingPauseNotRecorded,
+                $pauseWhileThePollIsUnanswered->untilEpochMilliseconds,
+            );
         }
 
         $timestampOfTheStoredPayload = $storedPayload->payload['timestamp'] ?? null;
@@ -178,7 +236,7 @@ final class PollingTransport
         );
 
         return match ($answer->kind) {
-            PollAnswerKind::Payload => new PollAttempt(
+            PollAnswerKind::Payload => PollAttempt::answeredWithAPayload(
                 new StoredPayload(
                     self::payloadAfterReceiving($answer->payload, $storedPayload),
                     $answeredAt,
@@ -192,7 +250,7 @@ final class PollingTransport
                     $pauseAfterTheFailedPollOf($pollingIntervalMilliseconds),
                     self::failureWithStatus(204),
                 )
-                : new PollAttempt(
+                : PollAttempt::answeredThatNothingChanged(
                     new StoredPayload($storedPayload->payload, $answeredAt, $sessionId),
                     $answeredAt + $pollingIntervalMilliseconds,
                 ),
@@ -266,7 +324,7 @@ final class PollingTransport
     ): PollAttempt {
         $refreshLock->recordPollingPause($this->endpoint->url, $pollingPause);
 
-        return new PollAttempt(null, $pollingPause->untilEpochMilliseconds, $failure, $failedUnrecoverably);
+        return PollAttempt::failed($failure, $failedUnrecoverably, $pollingPause->untilEpochMilliseconds);
     }
 
     private function logAndReportTheFailureOf(PollAttempt $pollAttempt): void

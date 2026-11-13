@@ -58,24 +58,35 @@ final class LocalStore
 
     public function refreshLockAcquiredWithin(int $timeoutMilliseconds): ?RefreshLock
     {
-        return $this->usableFolder === null
+        $refreshLock = $this->usableFolder === null
             ? null
             : RefreshLock::acquiredWithin($timeoutMilliseconds, $this->usableFolder, $this->logger);
+
+        return $refreshLock instanceof RefreshLock ? $refreshLock : null;
     }
 
     /**
      * @param \Closure(int $remainingMilliseconds, RefreshLock $refreshLock): ?StoredPayload $fetchFreshPayload
      */
-    public function storedPayloadFilledWithin(int $timeoutMilliseconds, \Closure $fetchFreshPayload): ?StoredPayload
-    {
+    public function storedPayloadFilledWithin(
+        int $timeoutMilliseconds,
+        \Closure $fetchFreshPayload,
+    ): StoredPayload|UnfilledStore {
         $storedPayload = $this->storedPayload();
         if ($storedPayload !== null) {
             return $storedPayload;
         }
+        if ($this->usableFolder === null) {
+            return UnfilledStore::UnusableAsItsErrorLineSays;
+        }
+
         $startedAt = hrtime(true);
-        $refreshLock = $this->refreshLockAcquiredWithin($timeoutMilliseconds);
-        if ($refreshLock === null) {
-            return $this->storedPayload();
+        $refreshLock = RefreshLock::acquiredWithin($timeoutMilliseconds, $this->usableFolder, $this->logger);
+        if (!$refreshLock instanceof RefreshLock) {
+            return $this->storedPayload() ?? match ($refreshLock) {
+                UnacquiredRefreshLock::HeldPastTheTimeout => UnfilledStore::RefreshLockHeldPastTheTimeout,
+                UnacquiredRefreshLock::LockFileUnusable => UnfilledStore::UnusableAsItsErrorLineSays,
+            };
         }
 
         try {
@@ -86,8 +97,13 @@ final class LocalStore
 
             $waitedMilliseconds = intdiv(hrtime(true) - $startedAt, 1_000_000);
             $freshPayload = $fetchFreshPayload(max(0, $timeoutMilliseconds - $waitedMilliseconds), $refreshLock);
+            if ($freshPayload === null) {
+                return UnfilledStore::NothingFetched;
+            }
 
-            return $freshPayload !== null && $refreshLock->replaceStoredPayload($freshPayload) ? $freshPayload : null;
+            return $refreshLock->replaceStoredPayload($freshPayload)
+                ? $freshPayload
+                : UnfilledStore::UnusableAsItsErrorLineSays;
         } finally {
             $refreshLock->release();
         }

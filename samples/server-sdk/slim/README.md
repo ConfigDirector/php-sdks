@@ -25,16 +25,17 @@ curl 'http://127.0.0.1:3700/configs?id=user-123&plan=pro'
 ```json
 {
   "temporary-feature-flag": true,
-  "permanent-kill-switch": true,
-  "integer-config": 42,
-  "day-of-the-week-config": "Tuesday",
-  "json-value-config": { "greeting": "hello", "sizes": [1, 2] }
+  "permanent-kill-switch": false,
+  "integer-config": 10,
+  "day-of-the-week-config": "Friday",
+  "json-value-config": []
 }
 ```
 
-The SDK does not connect to ConfigDirector yet. Until it does, every client evaluates the same sample
-configs built into the SDK, whatever key it is given, and what you see above is what they serve to
-this context.
+Those are the in-code default values the sample passes in, which is what it serves without a real
+key. Put the server SDK key of one of your environments in `.env` as `CONFIGDIRECTOR_SERVER_KEY`,
+create configs with these five keys in that project, and the response shows what your targeting
+rules serve to the context in the query string.
 
 Query parameters double as the context the configs are evaluated for: `id`, `kind`, `name` and
 `anonymous` map to the matching `Context` fields, and anything else becomes a trait:
@@ -67,10 +68,10 @@ In Go or Python an application creates one client for the process and shares it 
 ends. A PHP request starts with empty memory: PHP-FPM, Apache's PHP module and the built-in
 server above run the application again for each request and throw away everything it created when
 the request ends. One client per request is therefore the most a PHP application can share, and the
-SDK will keep what has to outlive a request outside the client: it will keep the values
-ConfigDirector serves in a local store on disk, shared by the PHP processes of one host, and only one
-request per polling interval will ask ConfigDirector for new ones. A client per request will cost a
-read of that store, not a connection to ConfigDirector.
+SDK keeps what has to outlive a request outside the client: it keeps the values ConfigDirector
+serves in a local store on disk, shared by the PHP processes of one host, and only one request per
+polling interval asks ConfigDirector for new ones, after its response is built. A client per
+request costs a read of that store, not a connection to ConfigDirector.
 
 Within a request, create the client once and read through it as often as you need. Never create one
 per read: each new client has to be initialized again before it serves values, and the handlers and
@@ -78,10 +79,11 @@ watches registered on one client never see another's reads.
 
 ## What else it demonstrates
 
-**Initialization is explicit and non-fatal.** `initialize()` waits for values up to
-`CONFIGDIRECTOR_TIMEOUT` milliseconds. When none arrive in time, it logs a warning and returns, and
-every read in that request returns its in-code default value. Creating the client makes no network
-call.
+**Initialization is explicit and non-fatal.** `initialize()` reads the values from the local store.
+Only when the store is still empty, as on the first request after a deploy, does it ask
+ConfigDirector for them and wait up to `CONFIGDIRECTOR_TIMEOUT` milliseconds. When it gets none, it
+returns, and every read in that request returns its in-code default value. Creating the client
+makes no network call and touches no file.
 
 **In-code default values are the fallback.** Every `getValue()` call passes the value to serve when
 ConfigDirector cannot provide one, so it should be the safe choice. Its type also decides how the
@@ -112,27 +114,35 @@ The SDK also supports watching configs and subscribing to the client's events; s
 
 [`tests/SampleApplicationTest.php`](tests/SampleApplicationTest.php) calls the application in process:
 it creates the Slim app with `SampleApplication::create()`, builds each request with Slim's PSR-7
-factory and passes it to `$app->handle()`, so no server runs and nothing reaches the network.
+factory and passes it to `$app->handle()`, so no web server runs.
 
 ```php
-$app = SampleApplication::create(ConfigDirectorSettings::fromEnvironment([]));
+$app = SampleApplication::create($settings);
 
 $request = (new ServerRequestFactory())->createServerRequest('GET', '/configs?id=user-123&plan=pro');
 $response = $app->handle($request);
 ```
 
+The SDK has no test client yet, so the tests give the application the settings of a small local
+server, [`tests/Support/serve-the-sample-configs.php`](tests/Support/serve-the-sample-configs.php),
+that answers the SDK with five configs whose values differ from the in-code default values, and a
+storage path of their own. Nothing reaches ConfigDirector.
+
 To see the context each config was evaluated for, and why it got its value, a test takes the
 request's client from the container and registers a `configEvaluated` handler before handling the
-request. The SDK does not connect to ConfigDirector yet, so the tests assert what the sample configs
-built into it serve.
+request.
 
 [`tests/ConfigDirectorSettingsTest.php`](tests/ConfigDirectorSettingsTest.php) covers how the
 environment becomes the client's settings.
 
 ## Running without a server SDK key
 
-Once the SDK connects to ConfigDirector, a request that finds no values in the local store and
-cannot get any, because the key is wrong or ConfigDirector cannot be reached, will leave the client
-not ready, and every config will fall back to the in-code default value this app passes in. That is
-the path a production app takes with a wrong key, so it is worth seeing: the app keeps serving, on
-the in-code default values you chose.
+A request that finds no values in the local store and cannot get any, because the key is wrong or
+ConfigDirector cannot be reached, leaves the client not ready, and every config falls back to the
+in-code default value this app passes in. That is the path a production app takes with a wrong
+key, so it is worth seeing: the app keeps serving, on the in-code default values you chose.
+
+With `fake-sample-key` ConfigDirector refuses the key. The request that asked logs that once at
+error level, and the SDK does not ask again for one hour: the requests that follow return at once
+with the in-code default values above. After you put a real key in `.env`, the next request asks
+ConfigDirector with that key, because each key has a local store of its own.

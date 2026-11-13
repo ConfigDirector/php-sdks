@@ -6,6 +6,7 @@ namespace App\Tests;
 
 use App\ConfigDirectorSettings;
 use App\SampleApplication;
+use App\Tests\Support\SdkServerOfTheSampleTests;
 use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConfigEvaluatedEvent;
 use ConfigDirector\Context;
@@ -18,9 +19,24 @@ use Slim\Psr7\Factory\ServerRequestFactory;
 
 final class SampleApplicationTest extends TestCase
 {
+    private static ?SdkServerOfTheSampleTests $sdkServer = null;
+
+    #[\Override]
+    public static function setUpBeforeClass(): void
+    {
+        self::$sdkServer = SdkServerOfTheSampleTests::start();
+    }
+
+    #[\Override]
+    public static function tearDownAfterClass(): void
+    {
+        self::$sdkServer?->stop();
+        self::$sdkServer = null;
+    }
+
     public function testConfigsReturnsTheFiveConfigsAsServed(): void
     {
-        $app = SampleApplication::create(ConfigDirectorSettings::fromEnvironment([]));
+        $app = SampleApplication::create(self::settingsOfTheSdkServer());
         $reasonsByConfigKey = [];
         self::clientIn($app)->on(
             'configEvaluated',
@@ -35,7 +51,7 @@ final class SampleApplicationTest extends TestCase
         self::assertSame('application/json', $response->getHeaderLine('Content-Type'));
         self::assertSame(
             [
-                'temporary-feature-flag' => true,
+                'temporary-feature-flag' => false,
                 'permanent-kill-switch' => true,
                 'integer-config' => 42,
                 'day-of-the-week-config' => 'Tuesday',
@@ -57,7 +73,7 @@ final class SampleApplicationTest extends TestCase
 
     public function testTheQueryStringBecomesTheContextOfEveryEvaluation(): void
     {
-        $app = SampleApplication::create(ConfigDirectorSettings::fromEnvironment([]));
+        $app = SampleApplication::create(self::settingsOfTheSdkServer());
         $contextsByConfigKey = [];
         self::clientIn($app)->on(
             'configEvaluated',
@@ -89,9 +105,7 @@ final class SampleApplicationTest extends TestCase
 
     public function testTheDebugLogLevelMakesTheSdkWriteEachEvaluation(): void
     {
-        $app = SampleApplication::create(
-            ConfigDirectorSettings::fromEnvironment(['CONFIGDIRECTOR_LOG_LEVEL' => 'debug']),
-        );
+        $app = SampleApplication::create(self::settingsOfTheSdkServer(logLevel: 'debug'));
 
         $this->expectOutputRegex('/debug.*integer-config/');
         self::get($app, '/configs');
@@ -129,6 +143,15 @@ final class SampleApplicationTest extends TestCase
         self::assertSame(404, $response->getStatusCode());
         self::assertSame('application/json', $response->getHeaderLine('Content-Type'));
         self::assertStringContainsString('GET /configs', self::errorIn($response));
+    }
+
+    private static function settingsOfTheSdkServer(?string $logLevel = null): ConfigDirectorSettings
+    {
+        if (self::$sdkServer === null) {
+            throw new \LogicException('The SDK server of the sample tests is not running.');
+        }
+
+        return self::$sdkServer->settings($logLevel);
     }
 
     /**

@@ -35,6 +35,21 @@ final readonly class Rule
     }
 
     /**
+     * @return list<string>
+     */
+    public function segmentIds(): array
+    {
+        $segmentIds = [];
+        foreach ($this->conditions as $condition) {
+            if ($condition instanceof SegmentCondition) {
+                $segmentIds[] = $condition->segmentId;
+            }
+        }
+
+        return $segmentIds;
+    }
+
+    /**
      * @param array<string, Segment> $segments
      */
     private function serveWhenEveryConditionHolds(

@@ -20,9 +20,15 @@ final class CloseCountingConnection implements Connection
     ) {}
 
     #[\Override]
-    public function payloadDeliveredWithin(int $timeoutMilliseconds): ServerSdkPayload
+    public function payloadForInitialization(): ServerSdkPayload
     {
         return $this->payload;
+    }
+
+    #[\Override]
+    public function payloadFoundByARead(): null
+    {
+        return null;
     }
 
     #[\Override]

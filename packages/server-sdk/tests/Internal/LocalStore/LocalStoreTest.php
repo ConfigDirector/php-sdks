@@ -8,6 +8,7 @@ use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\PollingPause;
 use ConfigDirector\Internal\LocalStore\RefreshLock;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
+use ConfigDirector\Internal\LocalStore\UnfilledStore;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
@@ -100,9 +101,9 @@ final class LocalStoreTest extends TestCase
         $refreshLock = $store->refreshLockAcquiredWithin(0);
         self::assertNotNull($refreshLock);
 
-        $refreshLock->replaceStoredPayload(new StoredPayload(['percentage' => 100.0], 1, 'session-1'));
+        $refreshLock->replaceStoredPayload(new StoredPayload(['configs' => ['percentage' => 100.0]], 1, 'session-1'));
 
-        self::assertSame(['percentage' => 100.0], $store->storedPayload()?->payload);
+        self::assertSame(['configs' => ['percentage' => 100.0]], $store->storedPayload()?->payload);
     }
 
     public function testAStoredPayloadReplacesTheOneStoredBefore(): void
@@ -143,12 +144,15 @@ final class LocalStoreTest extends TestCase
         self::assertNotNull($firstRefreshLock);
         self::assertNotNull($secondRefreshLock);
 
-        $firstRefreshLock->replaceStoredPayload(new StoredPayload(['environment' => 'first'], 1, 'session-1'));
-        $secondRefreshLock->replaceStoredPayload(new StoredPayload(['environment' => 'second'], 2, 'session-2'));
+        $firstRefreshLock->replaceStoredPayload(new StoredPayload(['configs' => ['first' => []]], 1, 'session-1'));
+        $secondRefreshLock->replaceStoredPayload(new StoredPayload(['configs' => ['second' => []]], 2, 'session-2'));
 
-        self::assertEquals(new StoredPayload(['environment' => 'first'], 1, 'session-1'), $firstStore->storedPayload());
         self::assertEquals(
-            new StoredPayload(['environment' => 'second'], 2, 'session-2'),
+            new StoredPayload(['configs' => ['first' => []]], 1, 'session-1'),
+            $firstStore->storedPayload(),
+        );
+        self::assertEquals(
+            new StoredPayload(['configs' => ['second' => []]], 2, 'session-2'),
             $secondStore->storedPayload(),
         );
     }
@@ -270,6 +274,21 @@ final class LocalStoreTest extends TestCase
         );
 
         self::assertNull($store->storedPayload());
+    }
+
+    public function testAPayloadFileWhosePayloadCarriesNoConfigsObjectIsReadAsAnEmptyStoreWithOneError(): void
+    {
+        $logger = new RecordingLogger();
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger);
+        file_put_contents(
+            $this->payloadFilePath(),
+            '{"confirmedFreshAt":1794477600123,"sessionId":"session-1","payload":{"kind":"full"}}',
+        );
+
+        $storedPayload = $store->storedPayload();
+
+        self::assertNull($storedPayload);
+        self::assertSame([['file' => $this->payloadFilePath()]], $logger->contextsLoggedAt(LogLevel::ERROR));
     }
 
     public function testADirectoryInPlaceOfThePayloadFileIsReadAsAnEmptyStoreWithOneError(): void
@@ -673,7 +692,7 @@ final class LocalStoreTest extends TestCase
             static fn(): StoredPayload => new StoredPayload(['configs' => ['fetched' => []]], 1_000, 'session-1'),
         );
 
-        self::assertNull($filledPayload);
+        self::assertSame(UnfilledStore::UnusableAsItsErrorLineSays, $filledPayload);
     }
 
     public function testAnEmptyStoreIsFilledWithTheFetchedPayload(): void
@@ -756,7 +775,7 @@ final class LocalStoreTest extends TestCase
 
         $filledPayload = $store->storedPayloadFilledWithin(1_000, static fn(): ?StoredPayload => null);
 
-        self::assertNull($filledPayload);
+        self::assertSame(UnfilledStore::NothingFetched, $filledPayload);
         self::assertNull($store->storedPayload());
     }
 
@@ -777,7 +796,28 @@ final class LocalStoreTest extends TestCase
         );
 
         self::assertSame(0, $fetches);
-        self::assertNull($filledPayload);
+        self::assertSame(UnfilledStore::RefreshLockHeldPastTheTimeout, $filledPayload);
+    }
+
+    public function testAnEmptyStoreWhoseRefreshLockFileCannotBeOpenedIsNotFetchedAndLogsOneError(): void
+    {
+        $logger = new RecordingLogger();
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger);
+        mkdir(dirname($this->payloadFilePath()) . DIRECTORY_SEPARATOR . 'lock');
+        $fetches = 0;
+
+        $filledPayload = $store->storedPayloadFilledWithin(
+            3_000,
+            static function () use (&$fetches): StoredPayload {
+                $fetches++;
+
+                return new StoredPayload(['configs' => ['fetched' => []]], 1_000, 'session-1');
+            },
+        );
+
+        self::assertSame(0, $fetches);
+        self::assertSame(UnfilledStore::UnusableAsItsErrorLineSays, $filledPayload);
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::ERROR));
     }
 
     public function testFillingTheStoreReleasesTheRefreshLock(): void

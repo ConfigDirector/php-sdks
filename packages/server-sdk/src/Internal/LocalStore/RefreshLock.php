@@ -23,8 +23,11 @@ final class RefreshLock
         private readonly LoggerInterface $logger,
     ) {}
 
-    public static function acquiredWithin(int $timeoutMilliseconds, string $storeFolder, LoggerInterface $logger): ?self
-    {
+    public static function acquiredWithin(
+        int $timeoutMilliseconds,
+        string $storeFolder,
+        LoggerInterface $logger,
+    ): self|UnacquiredRefreshLock {
         $lockFilePath = $storeFolder . DIRECTORY_SEPARATOR . 'lock';
         $lockFile = SilencedWarnings::during(static function () use ($lockFilePath) {
             $lockFile = fopen($lockFilePath, 'cb');
@@ -35,7 +38,7 @@ final class RefreshLock
         if ($lockFile === false) {
             $logger->error(self::UNWRITABLE_FILE_MESSAGE, ['file' => $lockFilePath]);
 
-            return null;
+            return UnacquiredRefreshLock::LockFileUnusable;
         }
 
         $deadline = hrtime(true) + $timeoutMilliseconds * 1_000_000;
@@ -44,12 +47,12 @@ final class RefreshLock
                 fclose($lockFile);
                 $logger->error(self::UNWRITABLE_FILE_MESSAGE, ['file' => $lockFilePath]);
 
-                return null;
+                return UnacquiredRefreshLock::LockFileUnusable;
             }
             if (hrtime(true) >= $deadline) {
                 fclose($lockFile);
 
-                return null;
+                return UnacquiredRefreshLock::HeldPastTheTimeout;
             }
 
             usleep(self::PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS);

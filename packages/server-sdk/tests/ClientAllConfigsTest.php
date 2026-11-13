@@ -9,11 +9,11 @@ use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConfigState;
 use ConfigDirector\Context;
 use ConfigDirector\Tests\Support\RecordingLogger;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use ConfigDirector\Variation;
-use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
-final class ClientAllConfigsTest extends TestCase
+final class ClientAllConfigsTest extends SampleConfigsTestCase
 {
     public function testEveryConfigIsReturnedUnderItsKey(): void
     {
@@ -122,7 +122,11 @@ final class ClientAllConfigsTest extends TestCase
 
     public function testNothingIsReturnedBeforeInitialize(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $states = $client->getAllConfigs();
 
@@ -132,7 +136,11 @@ final class ClientAllConfigsTest extends TestCase
     public function testAContextWithAnInvalidKindIsIgnoredWholeAndLogged(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
         $invalidContext = new Context(id: 'device-1', kind: 'Device', traits: ['plan' => 'pro']);
 
@@ -144,7 +152,11 @@ final class ClientAllConfigsTest extends TestCase
 
     private static function readyClient(): ConfigDirectorClient
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
 
         return $client;

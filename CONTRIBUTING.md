@@ -86,13 +86,14 @@ new checks there rather than in either of them.
 
 ## How the provider identifies itself
 
-The SDK will report an SDK name and version in the `User-Agent` header and in telemetry:
-`php-server-sdk` and `ConfigDirector\Version::CURRENT`. A package built on the SDK, such as the
-provider, will report its own name and version, `php-openfeature-server-provider` and
-`ConfigDirector\OpenFeature\Version::CURRENT`, without the SDK accepting an arbitrary identity from its
-caller: the SDK will keep a closed list of the packages allowed to. This list does not exist yet; it
-will arrive with the provider. Adding a wrapper package will mean adding it to that list, releasing
-the SDK, and registering the new name in the ConfigDirector capability tables.
+The SDK reports an SDK name and version in the `User-Agent` header and in every request it sends
+for values, and will report them in telemetry: `php-server-sdk` and `ConfigDirector\Version::CURRENT`.
+A package built on the SDK, such as the provider, reports its own name and version,
+`php-openfeature-server-provider` and `ConfigDirector\OpenFeature\Version::CURRENT`, without the SDK
+accepting an arbitrary identity from its caller: the SDK keeps a closed list of the packages allowed
+to, the `ConfigDirector\Internal\Identity\Wrapper` enum, and a wrapper creates its client through its
+case of that enum. Adding a wrapper package means adding a case to it, releasing the SDK, and
+registering the new name in the ConfigDirector capability tables.
 
 ## Releasing
 

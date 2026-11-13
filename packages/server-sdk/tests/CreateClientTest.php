@@ -12,6 +12,7 @@ use ConfigDirector\ConnectionOptions;
 use ConfigDirector\TelemetryOptions;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
+use PHPUnit\Framework\Attributes\RequiresOperatingSystemFamily;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
@@ -86,6 +87,72 @@ final class CreateClientTest extends TestCase
         ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
             connection: new ConnectionOptions(url: 'http://sdk_proxy:8080/configdirector'),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testABlankStoragePathIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(storagePath: ''),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testARelativeStoragePathIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(storagePath: 'var/configdirector'),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testAnAbsoluteStoragePathIsAccepted(): void
+    {
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(
+                storagePath: sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'configdirector-storage-path',
+            ),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    #[DoesNotPerformAssertions]
+    #[RequiresOperatingSystemFamily('Windows')]
+    public function testANetworkPathIsAcceptedAsAStoragePathOnWindows(): void
+    {
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(storagePath: '\\\\file-server\\configdirector'),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    #[RequiresOperatingSystemFamily('Windows')]
+    public function testAPathWithoutADriveIsRejectedAsAStoragePathOnWindows(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(storagePath: '\\configdirector'),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testAnOfflineClientIgnoresTheStoragePath(): void
+    {
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, storagePath: 'var/configdirector'),
             logger: new RecordingLogger(),
         );
     }

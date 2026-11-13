@@ -14,6 +14,7 @@ use ConfigDirector\Internal\Client\EventHandlers;
 use ConfigDirector\Internal\Connection\ConfigDefinition;
 use ConfigDirector\Internal\Connection\Connection;
 use ConfigDirector\Internal\Connection\ServerSdkPayload;
+use ConfigDirector\Internal\Connection\UndeliveredPayload;
 use ConfigDirector\Internal\Evaluation\TargetingRules;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\CloseCountingConnection;
@@ -23,85 +24,6 @@ use Psr\Log\LogLevel;
 
 final class DefaultConfigDirectorClientTest extends TestCase
 {
-    public function testAClientWhoseConnectionDeliversNothingInTimeIsNotReady(): void
-    {
-        $client = new DefaultConfigDirectorClient(
-            self::connectionDeliveringNothing(),
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-        );
-
-        $client->initialize();
-
-        self::assertFalse($client->isReady());
-    }
-
-    public function testATimedOutInitializeLogsOneWarningWithTheTimeout(): void
-    {
-        $logger = new RecordingLogger();
-        $client = new DefaultConfigDirectorClient(
-            self::connectionDeliveringNothing(),
-            new Metadata(),
-            250,
-            $logger,
-            new EventHandlers($logger),
-        );
-
-        $client->initialize();
-
-        self::assertSame([['timeout' => 250]], $logger->contextsLoggedAt(LogLevel::WARNING));
-    }
-
-    public function testAReadAfterATimedOutInitializeReturnsTheInCodeDefaultValue(): void
-    {
-        $client = new DefaultConfigDirectorClient(
-            self::connectionDeliveringNothing(),
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-        );
-        $client->initialize();
-
-        $evaluation = $client->evaluate('integer-config', 10);
-
-        self::assertEquals(
-            new ConfigEvaluation('integer-config', 10, null, null, true, EvaluationReason::ClientNotReady, null),
-            $evaluation,
-        );
-    }
-
-    public function testInitializeWaitsForTheConnectionUpToTheConfiguredTimeout(): void
-    {
-        $connection = new class implements Connection {
-            public ?int $timeoutWaited = null;
-
-            #[\Override]
-            public function payloadDeliveredWithin(int $timeoutMilliseconds): ?ServerSdkPayload
-            {
-                $this->timeoutWaited = $timeoutMilliseconds;
-
-                return null;
-            }
-
-            #[\Override]
-            public function close(): void {}
-        };
-        $client = new DefaultConfigDirectorClient(
-            $connection,
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-        );
-
-        $client->initialize();
-
-        self::assertSame(250, $connection->timeoutWaited);
-    }
-
     public function testConfigsUpdatedNamesTheKeysALaterPayloadNoLongerCarries(): void
     {
         $updates = [];
@@ -125,7 +47,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
         self::assertEquals(
             [
                 new ConfigsUpdatedEvent(['integer-config', 'day-of-the-week-config', 'float-config'], []),
-                new ConfigsUpdatedEvent(['day-of-the-week-config'], ['integer-config', 'float-config']),
+                new ConfigsUpdatedEvent([], ['integer-config', 'float-config']),
             ],
             $updates,
         );
@@ -152,6 +74,41 @@ final class DefaultConfigDirectorClientTest extends TestCase
         $client->initialize();
 
         self::assertSame(['value-of-integer-config', 'fallback'], $values);
+    }
+
+    public function testADisposedClientTakesInNoPayloadAReadFinds(): void
+    {
+        $connection = new class (self::payloadWith('integer-config')) implements Connection {
+            public function __construct(private readonly ServerSdkPayload $payload) {}
+
+            #[\Override]
+            public function payloadForInitialization(): ServerSdkPayload
+            {
+                return $this->payload;
+            }
+
+            #[\Override]
+            public function payloadFoundByARead(): ServerSdkPayload
+            {
+                return $this->payload;
+            }
+
+            #[\Override]
+            public function close(): void {}
+        };
+        $client = new DefaultConfigDirectorClient(
+            $connection,
+            new Metadata(),
+            250,
+            new RecordingLogger(),
+            new EventHandlers(new RecordingLogger()),
+        );
+        $client->initialize();
+        $client->dispose();
+
+        $isReady = $client->isReady();
+
+        self::assertFalse($isReady);
     }
 
     public function testDisposeClosesTheConnection(): void
@@ -258,9 +215,15 @@ final class DefaultConfigDirectorClientTest extends TestCase
             public function __construct(private array $payloads) {}
 
             #[\Override]
-            public function payloadDeliveredWithin(int $timeoutMilliseconds): ?ServerSdkPayload
+            public function payloadForInitialization(): ServerSdkPayload|UndeliveredPayload
             {
-                return array_shift($this->payloads);
+                return array_shift($this->payloads) ?? UndeliveredPayload::ReasonLoggedAsAnError;
+            }
+
+            #[\Override]
+            public function payloadFoundByARead(): null
+            {
+                return null;
             }
 
             #[\Override]
@@ -281,20 +244,6 @@ final class DefaultConfigDirectorClientTest extends TestCase
         }
 
         return new ServerSdkPayload($configs, []);
-    }
-
-    private static function connectionDeliveringNothing(): Connection
-    {
-        return new class implements Connection {
-            #[\Override]
-            public function payloadDeliveredWithin(int $timeoutMilliseconds): ?ServerSdkPayload
-            {
-                return null;
-            }
-
-            #[\Override]
-            public function close(): void {}
-        };
     }
 
     /**

@@ -36,6 +36,25 @@ final readonly class ConfigDefinition
         );
     }
 
+    public function isDefinedAs(self $otherDefinition): bool
+    {
+        return serialize($this) === serialize($otherDefinition);
+    }
+
+    /**
+     * @param list<string> $segmentIds
+     */
+    public function usesAnySegmentOf(array $segmentIds): bool
+    {
+        foreach ($this->targetingRules->rules as $rule) {
+            if (array_intersect($rule->segmentIds(), $segmentIds) !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function variationWithId(?string $variationId): ?Variation
     {
         foreach ($this->variations as $variation) {

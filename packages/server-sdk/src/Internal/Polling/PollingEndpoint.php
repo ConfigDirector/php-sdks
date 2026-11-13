@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Polling;
 
+use ConfigDirector\Internal\Identity\SdkIdentity;
+use ConfigDirector\Internal\LocalStore\StoredPayload;
 use ConfigDirector\Metadata;
-use ConfigDirector\Version;
 
 final readonly class PollingEndpoint
 {
-    private const string SDK_NAME = 'php-server-sdk';
-
     private const int MAXIMUM_RESPONSE_BYTES = 32 * 1024 * 1024;
 
     private const int MAXIMUM_REFUSAL_DETAIL_BYTES = 1_024;
@@ -24,12 +23,13 @@ final readonly class PollingEndpoint
         string $baseUrl,
         private string $serverSdkKey,
         Metadata $metadata,
+        private SdkIdentity $sdkIdentity,
     ) {
         $this->url = rtrim($baseUrl, '/') . '/server/polling/v1';
         $this->metaContext = array_filter(
             [
-                'sdkName' => self::SDK_NAME,
-                'sdkVersion' => Version::CURRENT,
+                'sdkName' => $sdkIdentity->sdkName,
+                'sdkVersion' => $sdkIdentity->sdkVersion,
                 'appName' => $metadata->appName,
                 'appVersion' => $metadata->appVersion,
             ],
@@ -51,7 +51,7 @@ final readonly class PollingEndpoint
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $this->requestBody($sessionId, $lastUpdateTimestamp),
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-            CURLOPT_USERAGENT => self::SDK_NAME . '/' . Version::CURRENT,
+            CURLOPT_USERAGENT => $this->sdkIdentity->userAgent(),
             CURLOPT_TIMEOUT_MS => $timeLimitMilliseconds,
             CURLOPT_CONNECTTIMEOUT_MS => $timeLimitMilliseconds,
             CURLOPT_NOSIGNAL => true,
@@ -126,8 +126,13 @@ final readonly class PollingEndpoint
             return PollAnswer::unreadable($exception->getMessage());
         }
         $isAJsonObject = is_array($payload) && ($payload === [] || !array_is_list($payload));
+        if (!$isAJsonObject) {
+            return PollAnswer::unreadable('it is not a JSON object');
+        }
 
-        return $isAJsonObject ? PollAnswer::payload($payload) : PollAnswer::unreadable('it is not a JSON object');
+        return StoredPayload::holdsAConfigsObject($payload)
+            ? PollAnswer::payload($payload)
+            : PollAnswer::unreadable('it carries no configs object');
     }
 
     private function refusalDetailIn(string $responseBody): string

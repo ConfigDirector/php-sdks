@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ConfigDirector\Tests\Internal\Polling;
 
 use ConfigDirector\ConfigDirectorConnectionException;
+use ConfigDirector\Internal\Connection\UndeliveredPayload;
+use ConfigDirector\Internal\Identity\SdkIdentity;
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\PollingPause;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
@@ -40,6 +42,12 @@ final class PollingTransportTest extends TestCase
     /** @var list<bool> */
     private array $refreshLockWasFreeWhileReporting = [];
 
+    /** @var list<array<array-key, mixed>> */
+    private array $payloadsReportedAfterAPoll = [];
+
+    /** @var list<bool> */
+    private array $refreshLockWasFreeWhileReportingAPayload = [];
+
     /** @var list<ScriptedSdkServer> */
     private array $servers = [];
 
@@ -72,7 +80,7 @@ final class PollingTransportTest extends TestCase
         self::assertCount(1, $server->requestsReceived());
         self::assertSame(
             ['kind' => 'full', 'configs' => ['flag' => ['key' => 'flag']]],
-            $storedPayload?->payload,
+            self::payloadOf($storedPayload),
         );
     }
 
@@ -182,7 +190,10 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'old']]], $storedPayload?->payload);
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'old']]],
+            self::payloadOf($storedPayload),
+        );
         self::assertSame([], $server->requestsReceived());
     }
 
@@ -482,7 +493,10 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]], $storedPayload?->payload);
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]],
+            self::payloadOf($storedPayload),
+        );
         self::assertCount(2, $server->requestsReceived());
     }
 
@@ -526,7 +540,10 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]], $storedPayload?->payload);
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]],
+            self::payloadOf($storedPayload),
+        );
         self::assertCount(2, $server->requestsReceived());
     }
 
@@ -541,7 +558,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(2, $server->requestsReceived());
         self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::ERROR));
         self::assertNull($this->statusOfTheOneErrorLogged());
@@ -557,7 +574,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
         self::assertSame(503, $this->statusOfTheOneErrorLogged());
     }
@@ -572,7 +589,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
         self::assertSame(302, $this->statusOfTheOneErrorLogged());
     }
@@ -587,7 +604,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
         self::assertNull($this->statusOfTheOneErrorLogged());
     }
@@ -602,7 +619,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
         self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::ERROR));
     }
@@ -614,7 +631,19 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
+        self::assertNull($this->storeOpenedAgain()->storedPayload());
+        self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::ERROR));
+    }
+
+    public function testAnAnswerWithoutAConfigsObjectIsNotStoredAndLogsOneError(): void
+    {
+        $server = $this->serverAnswering([['status' => 200, 'body' => ['kind' => 'full', 'message' => 'Welcome']]]);
+        $transport = $this->transportPolling($server);
+
+        $storedPayload = $transport->storedPayloadForInitialization();
+
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertNull($this->storeOpenedAgain()->storedPayload());
         self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::ERROR));
     }
@@ -628,7 +657,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertNull($this->storeOpenedAgain()->storedPayload());
         self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::ERROR));
     }
@@ -642,7 +671,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => []], $storedPayload?->payload);
+        self::assertSame(['kind' => 'full', 'configs' => []], self::payloadOf($storedPayload));
     }
 
     public function testA204ToAPollOfAnEmptyStoreLogsOneErrorAndStoresNothing(): void
@@ -652,7 +681,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertNull($this->storeOpenedAgain()->storedPayload());
         self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::ERROR));
     }
@@ -668,7 +697,7 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 59_999;
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::FailedPollOnRecord, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
     }
 
@@ -683,12 +712,15 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 60_000;
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]], $storedPayload?->payload);
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]],
+            self::payloadOf($storedPayload),
+        );
         [$failedPoll, $nextPoll] = $server->requestsReceived();
         self::assertIsArray($failedPoll['body']);
         self::assertIsArray($nextPoll['body']);
         self::assertSame($failedPoll['body']['sessionId'], $nextPoll['body']['sessionId']);
-        self::assertSame($failedPoll['body']['sessionId'], $storedPayload->sessionId);
+        self::assertSame($failedPoll['body']['sessionId'], self::sessionIdOf($storedPayload));
     }
 
     public function testAfterAFailedPollOfAStaleStoreTheNextRequestInsideTheIntervalSendsNoPollAndTheValuesStay(): void
@@ -738,7 +770,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
     }
 
@@ -766,7 +798,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertSame([], $server->requestsReceived());
         self::assertSame([['file' => $pollingPauseFile]], $this->logger->contextsLoggedAt(LogLevel::ERROR));
     }
@@ -781,7 +813,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
         self::assertSame(401, $this->statusOfTheOneErrorLogged());
     }
@@ -820,7 +852,7 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 3_599_999;
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::FailedPollOnRecord, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
     }
 
@@ -835,7 +867,10 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 3_600_000;
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]], $storedPayload?->payload);
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]],
+            self::payloadOf($storedPayload),
+        );
         self::assertCount(2, $server->requestsReceived());
     }
 
@@ -850,7 +885,10 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 1_000;
         $storedPayload = $this->transportPolling($correctedServer)->storedPayloadForInitialization();
 
-        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]], $storedPayload?->payload);
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]],
+            self::payloadOf($storedPayload),
+        );
         self::assertCount(1, $correctedServer->requestsReceived());
     }
 
@@ -888,7 +926,7 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 119_999;
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::FailedPollOnRecord, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
     }
 
@@ -998,7 +1036,7 @@ final class PollingTransportTest extends TestCase
         $transport->storedPayloadForInitialization();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_000;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertSame([], $server->requestsReceived());
     }
@@ -1013,7 +1051,7 @@ final class PollingTransportTest extends TestCase
         $transport->storedPayloadForInitialization();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertCount(1, $server->requestsReceived());
         self::assertSame(
@@ -1029,10 +1067,10 @@ final class PollingTransportTest extends TestCase
         $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
         $transport->storedPayloadForInitialization();
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 90_000;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertCount(1, $server->requestsReceived());
     }
@@ -1044,10 +1082,10 @@ final class PollingTransportTest extends TestCase
         $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
         $transport->storedPayloadForInitialization();
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 90_001;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertCount(2, $server->requestsReceived());
     }
@@ -1059,10 +1097,10 @@ final class PollingTransportTest extends TestCase
         $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
         $transport->storedPayloadForInitialization();
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 90_000;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertCount(1, $server->requestsReceived());
     }
@@ -1076,11 +1114,11 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
         $lockOfTheProcessThatPolls = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
         self::assertNotNull($lockOfTheProcessThatPolls);
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
         $lockOfTheProcessThatPolls->release();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 90_000;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertSame([], $server->requestsReceived());
     }
@@ -1094,13 +1132,206 @@ final class PollingTransportTest extends TestCase
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
         $lockOfTheProcessThatPolls = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
         self::assertNotNull($lockOfTheProcessThatPolls);
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
         $lockOfTheProcessThatPolls->release();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 90_001;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertCount(1, $server->requestsReceived());
+    }
+
+    public function testALongRunningProcessTimesItsNextPollFromThePayloadAnotherProcessStored(): void
+    {
+        $server = $this->serverAnswering([['status' => 204]]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON);
+        $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
+        $transport->storedPayloadForInitialization();
+        $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 40_000;
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON + 40_000);
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
+        $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 60_001;
+        $lockOfAnotherProcess = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
+        self::assertNotNull($lockOfAnotherProcess);
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
+        $lockOfAnotherProcess->release();
+
+        $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 100_001;
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
+
+        self::assertCount(1, $server->requestsReceived());
+    }
+
+    public function testAReadInALongRunningProcessIsGivenThePayloadItsPollStored(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => ['flag' => ['value' => 'new']]]],
+        ]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON - 60_000);
+        $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
+        $transport->storedPayloadForInitialization();
+
+        $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
+        $storedPayload = $transport->storedPayloadFoundByAReadInALongRunningProcess();
+
+        self::assertSame(['kind' => 'full', 'configs' => ['flag' => ['value' => 'new']]], $storedPayload?->payload);
+    }
+
+    public function testAPayloadReceivedByThePollOfAnEmptyStoreIsReportedOnce(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]]],
+        ]);
+
+        $this->transportPolling($server)->storedPayloadForInitialization();
+
+        self::assertSame(
+            [['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]]],
+            $this->payloadsReportedAfterAPoll,
+        );
+    }
+
+    public function testAPayloadReceivedByThePollAtTheEndOfARequestIsReported(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => ['flag' => ['value' => 'new']]]],
+        ]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON - 60_000);
+        $transport = $this->transportPolling($server);
+        $transport->storedPayloadForInitialization();
+
+        $transport->close();
+
+        self::assertSame(
+            [['kind' => 'full', 'configs' => ['flag' => ['value' => 'new']]]],
+            $this->payloadsReportedAfterAPoll,
+        );
+    }
+
+    public function testAStoredPayloadThatAPollConfirmsAsUnchangedIsNotReported(): void
+    {
+        $server = $this->serverAnswering([['status' => 204]]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON - 60_000);
+        $transport = $this->transportPolling($server);
+        $transport->storedPayloadForInitialization();
+
+        $transport->close();
+
+        self::assertCount(1, $server->requestsReceived());
+        self::assertSame([], $this->payloadsReportedAfterAPoll);
+    }
+
+    public function testARequestThatFindsThePauseOfAPollThatNeverFinishedSendsNoPollOfItsOwn(): void
+    {
+        $server = $this->serverAnswering([['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]]]);
+        $refreshLock = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+        $refreshLock->recordPollingPause(
+            $server->url . '/server/polling/v1',
+            new PollingPause(
+                'session-1',
+                self::NOVEMBER_12_2026_AT_NOON,
+                self::NOVEMBER_12_2026_AT_NOON + 60_000,
+                false,
+                null,
+            ),
+        );
+        $refreshLock->release();
+
+        $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
+
+        self::assertSame(UndeliveredPayload::FailedPollOnRecord, $storedPayload);
+        self::assertSame([], $server->requestsReceived());
+    }
+
+    public function testAPayloadAnotherProcessStoredWhileThisRequestWaitedIsNotReported(): void
+    {
+        $server = $this->serverAnswering([]);
+        $processThatPolls = PhpProcess::running(
+            dirname(__DIR__) . '/LocalStore/Processes/store-payload-while-keeping-the-lock.php',
+            [$this->storagePath, 'server-sdk-key', '150', '50'],
+        );
+        $lineOfTheProcessThatPolls = $processThatPolls->nextLineOfOutput();
+
+        $this->transportPolling($server)->storedPayloadForInitialization();
+        $processThatPolls->finished();
+
+        self::assertSame('locked', $lineOfTheProcessThatPolls);
+        self::assertSame([], $this->payloadsReportedAfterAPoll);
+    }
+
+    public function testAPayloadTheStoreCannotHoldIsNotGivenToAReadInALongRunningProcess(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => ['flag' => ['value' => 'new']]]],
+        ]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON - 60_000);
+        $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
+        $transport->storedPayloadForInitialization();
+        unlink($this->storeFolder() . '/payload.json');
+        mkdir($this->storeFolder() . '/payload.json');
+
+        $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
+        $storedPayload = $transport->storedPayloadFoundByAReadInALongRunningProcess();
+
+        self::assertCount(1, $server->requestsReceived());
+        self::assertNull($storedPayload);
+    }
+
+    public function testAClosedTransportGivesAReadNoPayload(): void
+    {
+        $server = $this->serverAnswering([]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON);
+        $transport = $this->transportPolling($server, flushIntervalMilliseconds: 30_000);
+        $transport->storedPayloadForInitialization();
+        $transport->close();
+
+        $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 30_001;
+        $storedPayload = $transport->storedPayloadFoundByAReadInALongRunningProcess();
+
+        self::assertNull($storedPayload);
+    }
+
+    public function testAnEmptyStoreWhoseTimeoutLeavesNoTimeForAPollSendsNoneAndSaysTheWaitReachedTheTimeout(): void
+    {
+        $server = $this->serverAnswering([['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]]]);
+        $transport = $this->transportPolling($server, timeoutMilliseconds: 0);
+
+        $storedPayload = $transport->storedPayloadForInitialization();
+
+        self::assertSame(UndeliveredPayload::WaitReachedTheTimeout, $storedPayload);
+        self::assertSame([], $server->requestsReceived());
+    }
+
+    public function testAStoredPayloadReadWithoutPollingIsNotReported(): void
+    {
+        $server = $this->serverAnswering([]);
+        $this->storePayload(['kind' => 'full', 'configs' => []], self::NOVEMBER_12_2026_AT_NOON);
+
+        $this->transportPolling($server)->storedPayloadForInitialization();
+
+        self::assertSame([], $this->payloadsReportedAfterAPoll);
+    }
+
+    public function testAPayloadTheStoreCannotHoldIsNotReported(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => ['flag' => ['value' => 'served']]]],
+        ]);
+        mkdir($this->storeFolder() . '/payload.json');
+
+        $this->transportPolling($server)->storedPayloadForInitialization();
+
+        self::assertSame([], $this->payloadsReportedAfterAPoll);
+    }
+
+    public function testTheRefreshLockIsFreeWhenAPayloadReceivedByAPollIsReported(): void
+    {
+        $server = $this->serverAnswering([['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]]]);
+
+        $this->transportPolling($server)->storedPayloadForInitialization();
+
+        self::assertSame([true], $this->refreshLockWasFreeWhileReportingAPayload);
     }
 
     public function testAClosedTransportSendsNoPollDuringARead(): void
@@ -1112,7 +1343,7 @@ final class PollingTransportTest extends TestCase
         $transport->close();
 
         $this->clock->epochMilliseconds = self::NOVEMBER_12_2026_AT_NOON + 60_000;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertSame([], $server->requestsReceived());
     }
@@ -1124,19 +1355,20 @@ final class PollingTransportTest extends TestCase
         touch($regularFile);
         $transport = new PollingTransport(
             LocalStore::ofServerSdkKey('server-sdk-key', $regularFile, $this->logger),
-            new PollingEndpoint($server->url, 'server-sdk-key', new Metadata()),
+            new PollingEndpoint($server->url, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
             PollingInterval::ofConfiguredSeconds(60),
             3_000,
             30_000,
             $this->clock,
             $this->logger,
             static function (): void {},
+            static function (): void {},
         );
 
         $storedPayload = $transport->storedPayloadForInitialization();
         $transport->close();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertSame([], $server->requestsReceived());
     }
 
@@ -1272,7 +1504,7 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $transport->storedPayloadForInitialization();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(2, $server->requestsReceived());
     }
 
@@ -1292,7 +1524,7 @@ final class PollingTransportTest extends TestCase
         $processHoldingTheRefreshLock->finished();
 
         self::assertSame('locked', $lineOfTheHolder);
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertCount(1, $server->requestsReceived());
     }
 
@@ -1373,7 +1605,7 @@ final class PollingTransportTest extends TestCase
         $waitedMilliseconds = intdiv(hrtime(true) - $startedAt, 1_000_000);
         $lockOfAnotherProcess->release();
 
-        self::assertNull($storedPayload);
+        self::assertSame(UndeliveredPayload::FailedPollOnRecord, $storedPayload);
         self::assertLessThan(1_000, $waitedMilliseconds);
     }
 
@@ -1403,7 +1635,7 @@ final class PollingTransportTest extends TestCase
         $processThatPolls->finished();
 
         self::assertSame('locked', $lineOfTheProcessThatPolls);
-        self::assertSame(['marker' => 'stored-by-the-holder'], $storedPayload?->payload);
+        self::assertSame(['configs' => [], 'marker' => 'stored-by-the-holder'], self::payloadOf($storedPayload));
         self::assertSame([], $server->requestsReceived());
     }
 
@@ -1438,7 +1670,7 @@ final class PollingTransportTest extends TestCase
         $this->clock->setTheWallClockBackBy(86_400_000);
 
         $this->clock->epochMilliseconds += 60_000;
-        $transport->pollWhenDueInALongRunningProcess();
+        $transport->storedPayloadFoundByAReadInALongRunningProcess();
 
         self::assertCount(1, $server->requestsReceived());
     }
@@ -1463,7 +1695,12 @@ final class PollingTransportTest extends TestCase
     ): PollingTransport {
         return new PollingTransport(
             $this->storeOpenedAgain(),
-            new PollingEndpoint($server->url, 'server-sdk-key', $metadata ?? new Metadata()),
+            new PollingEndpoint(
+                $server->url,
+                'server-sdk-key',
+                $metadata ?? new Metadata(),
+                SdkIdentity::ofTheServerSdk(),
+            ),
             PollingInterval::ofConfiguredSeconds($configuredIntervalSeconds),
             $timeoutMilliseconds,
             $flushIntervalMilliseconds,
@@ -1475,7 +1712,30 @@ final class PollingTransportTest extends TestCase
                 $this->refreshLockWasFreeWhileReporting[] = $refreshLock !== null;
                 $refreshLock?->release();
             },
+            function (StoredPayload $payloadReceived): void {
+                $this->payloadsReportedAfterAPoll[] = $payloadReceived->payload;
+                $refreshLock = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
+                $this->refreshLockWasFreeWhileReportingAPayload[] = $refreshLock !== null;
+                $refreshLock?->release();
+            },
         );
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private static function payloadOf(StoredPayload|UndeliveredPayload $delivered): array
+    {
+        self::assertInstanceOf(StoredPayload::class, $delivered);
+
+        return $delivered->payload;
+    }
+
+    private static function sessionIdOf(StoredPayload|UndeliveredPayload $delivered): string
+    {
+        self::assertInstanceOf(StoredPayload::class, $delivered);
+
+        return $delivered->sessionId;
     }
 
     private function statusOfTheOneErrorLogged(): ?int

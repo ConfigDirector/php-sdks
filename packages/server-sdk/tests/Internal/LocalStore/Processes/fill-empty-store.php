@@ -26,7 +26,11 @@ $storedPayload = $store->storedPayloadFilledWithin(
         $hasFetched = true;
         usleep(200_000);
 
-        return new StoredPayload(['fetchedBy' => $processName], 1_794_477_600_123, "session-of-{$processName}");
+        return new StoredPayload(
+            ['configs' => [], 'fetchedBy' => $processName],
+            1_794_477_600_123,
+            "session-of-{$processName}",
+        );
     },
 );
 
@@ -34,7 +38,7 @@ echo json_encode(
     [
         'process' => $processName,
         'hasFetched' => $hasFetched,
-        'fetchedBy' => $storedPayload?->payload['fetchedBy'] ?? null,
+        'fetchedBy' => $storedPayload instanceof StoredPayload ? $storedPayload->payload['fetchedBy'] ?? null : null,
     ],
     JSON_THROW_ON_ERROR,
 );

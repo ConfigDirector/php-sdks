@@ -18,7 +18,7 @@ $replacementsStored = 0;
 for ($replacement = 1; $replacement <= (int) $replacements; $replacement++) {
     $refreshLock = $store->refreshLockAcquiredWithin(5_000);
     $isStored = $refreshLock?->replaceStoredPayload(new StoredPayload(
-        ['padding' => str_repeat(chr(ord('a') + $replacement % 26), (int) $paddingBytes)],
+        ['configs' => [], 'padding' => str_repeat(chr(ord('a') + $replacement % 26), (int) $paddingBytes)],
         $replacement,
         'session-1',
     ));

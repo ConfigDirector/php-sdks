@@ -6,7 +6,7 @@ namespace ConfigDirector\Internal\Evaluation;
 
 final readonly class SegmentCondition implements Condition
 {
-    public function __construct(private string $operator, private string $segmentId) {}
+    public function __construct(private string $operator, public string $segmentId) {}
 
     #[\Override]
     public function holdsFor(EvaluationContext $context, array $segments): bool

@@ -12,15 +12,19 @@ use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\Context;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Tests\Support\RecordingLogger;
-use PHPUnit\Framework\TestCase;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use Psr\Log\LogLevel;
 
-final class ClientWatchesTest extends TestCase
+final class ClientWatchesTest extends SampleConfigsTestCase
 {
     public function testAWatchRegisteredBeforeInitializeReceivesTheValueDuringIt(): void
     {
         $days = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$days): void {
             $days[] = $day;
         });
@@ -33,7 +37,11 @@ final class ClientWatchesTest extends TestCase
     public function testAWatchReceivesTheValueServedToItsContext(): void
     {
         $days = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->watch(
             'day-of-the-week-config',
             'Friday',
@@ -51,7 +59,11 @@ final class ClientWatchesTest extends TestCase
     public function testAWatchRegisteredOnAReadyClientIsNotCalledUntilTheClientReceivesValues(): void
     {
         $days = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
 
         $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$days): void {
@@ -63,7 +75,11 @@ final class ClientWatchesTest extends TestCase
 
     public function testAWatchWithANullInCodeDefaultValueIsRejected(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $this->expectException(ConfigDirectorValidationException::class);
 
@@ -75,6 +91,7 @@ final class ClientWatchesTest extends TestCase
         $evaluations = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
                 $evaluations[] = $event->evaluation;
@@ -105,6 +122,7 @@ final class ClientWatchesTest extends TestCase
         $calls = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(
                 clientReady: function () use (&$calls): void {
@@ -127,7 +145,11 @@ final class ClientWatchesTest extends TestCase
     public function testTheFunctionWatchReturnsRemovesOnlyThatWatch(): void
     {
         $days = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $recordDay = function (string $day) use (&$days): void {
             $days[] = $day;
         };
@@ -148,7 +170,11 @@ final class ClientWatchesTest extends TestCase
     public function testUnwatchWithACallbackRemovesTheWatchOnTheKeyWithThatCallback(): void
     {
         $calls = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $first = function (string $day) use (&$calls): void {
             $calls[] = "first {$day}";
         };
@@ -166,7 +192,11 @@ final class ClientWatchesTest extends TestCase
     public function testUnwatchWithACallbackWatchingTwiceRemovesTheFirstWatchOnly(): void
     {
         $days = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $recordDay = function (string $day) use (&$days): void {
             $days[] = $day;
         };
@@ -187,7 +217,11 @@ final class ClientWatchesTest extends TestCase
     public function testUnwatchWithoutACallbackRemovesEveryWatchOnTheKey(): void
     {
         $calls = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$calls): void {
             $calls[] = "first {$day}";
         });
@@ -207,7 +241,11 @@ final class ClientWatchesTest extends TestCase
     public function testUnwatchAllRemovesEveryWatch(): void
     {
         $calls = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$calls): void {
             $calls[] = $day;
         });
@@ -226,7 +264,11 @@ final class ClientWatchesTest extends TestCase
         $logger = new RecordingLogger();
         $exception = new \RuntimeException('The watch failed');
         $days = [];
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->watch('integer-config', 10, static function () use ($exception): void {
             throw $exception;
         });

@@ -24,6 +24,21 @@ final readonly class StoredPayload
             : $this->confirmedFreshAtEpochMilliseconds + $pollingIntervalMilliseconds;
     }
 
+    public function stampOfItsWrite(): string
+    {
+        $timestamp = $this->payload['timestamp'] ?? null;
+
+        return $this->confirmedFreshAtEpochMilliseconds . ' ' . (is_string($timestamp) ? $timestamp : '');
+    }
+
+    /**
+     * @param array<array-key, mixed> $payload
+     */
+    public static function holdsAConfigsObject(array $payload): bool
+    {
+        return is_array($payload['configs'] ?? null);
+    }
+
     public function toJson(): string
     {
         return json_encode(
@@ -50,7 +65,8 @@ final readonly class StoredPayload
         $payload = $fileContents['payload'] ?? null;
         $confirmedFreshAt = $fileContents['confirmedFreshAt'] ?? null;
         $sessionId = $fileContents['sessionId'] ?? null;
-        if (!is_array($payload) || !is_int($confirmedFreshAt) || !is_string($sessionId) || $sessionId === '') {
+        $isAServerSdkPayload = is_array($payload) && self::holdsAConfigsObject($payload);
+        if (!$isAServerSdkPayload || !is_int($confirmedFreshAt) || !is_string($sessionId) || $sessionId === '') {
             return null;
         }
 

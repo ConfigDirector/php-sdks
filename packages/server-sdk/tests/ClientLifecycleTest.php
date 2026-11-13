@@ -8,21 +8,29 @@ use ConfigDirector\ConfigDirector;
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Tests\Support\RecordingLogger;
-use PHPUnit\Framework\TestCase;
+use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use Psr\Log\LogLevel;
 
-final class ClientLifecycleTest extends TestCase
+final class ClientLifecycleTest extends SampleConfigsTestCase
 {
     public function testANewClientIsNotReady(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         self::assertFalse($client->isReady());
     }
 
     public function testAnInitializedClientIsReady(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $client->initialize();
 
@@ -32,7 +40,11 @@ final class ClientLifecycleTest extends TestCase
     public function testInitializeLogsNoWarningWhenTheValuesArrive(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
 
         $client->initialize();
 
@@ -41,7 +53,11 @@ final class ClientLifecycleTest extends TestCase
 
     public function testADisposedClientIsNotReady(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
 
         $client->dispose();
@@ -51,7 +67,11 @@ final class ClientLifecycleTest extends TestCase
 
     public function testAReadAfterDisposeReturnsTheInCodeDefaultValue(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
         $client->dispose();
 
@@ -65,7 +85,11 @@ final class ClientLifecycleTest extends TestCase
 
     public function testNoConfigStatesAreReturnedAfterDispose(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
         $client->dispose();
 
@@ -76,7 +100,11 @@ final class ClientLifecycleTest extends TestCase
 
     public function testDisposingTwiceIsHarmless(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
         $client->initialize();
         $client->dispose();
 
@@ -88,7 +116,11 @@ final class ClientLifecycleTest extends TestCase
 
     public function testDisposingAClientThatWasNeverInitializedIsHarmless(): void
     {
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: new RecordingLogger());
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
 
         $client->dispose();
 
@@ -98,7 +130,11 @@ final class ClientLifecycleTest extends TestCase
     public function testADisposedClientStaysNotReadyWhenInitializedAgain(): void
     {
         $logger = new RecordingLogger();
-        $client = ConfigDirector::createClient(serverSdkKey: 'server-sdk-key', logger: $logger);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
         $client->initialize();
         $client->dispose();
 
