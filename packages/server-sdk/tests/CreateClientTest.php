@@ -157,6 +157,198 @@ final class CreateClientTest extends TestCase
         );
     }
 
+    public function testAnOfflineClientWithAFileAndValuesIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(
+                mode: ConnectionMode::Offline,
+                file: __DIR__ . '/flags.json',
+                values: ['new-checkout' => true],
+            ),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testValuesInPollingModeAreRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(values: ['new-checkout' => true]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testEmptyValuesInPollingModeAreRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(values: []),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAFileInPollingModeIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(file: __DIR__ . '/flags.json'),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineNullValueIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            // @phpstan-ignore argument.type
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['new-checkout' => null]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineValueWithABlankKeyIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: [" \t" => true]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineInfiniteFloatIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['discount-rate' => -INF]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineFloatThatIsNotANumberIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['discount-rate' => NAN]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineObjectIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(
+                mode: ConnectionMode::Offline,
+                // @phpstan-ignore argument.type
+                values: ['launch-date' => new \DateTimeImmutable('2026-11-13')],
+            ),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineResourceIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            // @phpstan-ignore argument.type
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['output' => STDOUT]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnObjectInsideAnInlineArrayIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(
+                mode: ConnectionMode::Offline,
+                values: ['launch' => ['dates' => [new \DateTimeImmutable('2026-11-13')]]],
+            ),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnObjectInsideAnInlineStdClassIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(
+                mode: ConnectionMode::Offline,
+                values: ['launch' => ['window' => (object) ['start' => new \DateTimeImmutable('2026-11-13')]]],
+            ),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInlineValueThatContainsItselfIsRejected(): void
+    {
+        $node = new \stdClass();
+        $node->next = $node;
+
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['chain' => ['first' => $node]]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnInfiniteFloatInsideAnInlineArrayIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['theme' => ['ratio' => INF]]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testATextThatIsNotUtf8InsideAnInlineArrayIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['theme' => ['name' => "caf\xE9"]]),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAnOfflineClientWithAFlushIntervalOfZeroIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline),
+            logger: new RecordingLogger(),
+            telemetry: new TelemetryOptions(flushInterval: 0),
+        );
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testAnOfflineClientIgnoresATimeoutOfZero(): void
+    {
+        ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, timeout: 0),
+            logger: new RecordingLogger(),
+        );
+    }
+
     public function testAnEventQueueLimitOfFiftyIsRejected(): void
     {
         $this->expectException(ConfigDirectorValidationException::class);

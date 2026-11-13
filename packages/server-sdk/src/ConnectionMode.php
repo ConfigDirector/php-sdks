@@ -16,7 +16,10 @@ enum ConnectionMode: string
     case Polling = 'polling';
 
     /**
-     * The client never connects to ConfigDirector and sends nothing. It needs no server SDK key.
+     * The client never connects to ConfigDirector and sends nothing, so the application is
+     * invisible to the ConfigDirector dashboard. It needs no server SDK key. It serves the values
+     * of {@see ConnectionOptions::$values} or {@see ConnectionOptions::$file} to every context,
+     * without applying targeting rules, or the in-code default values when neither is given.
      */
     case Offline = 'offline';
 }

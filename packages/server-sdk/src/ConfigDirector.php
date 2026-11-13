@@ -42,10 +42,13 @@ final class ConfigDirector
      * @param ClientHooks|null $hooks Handlers for the events the client emits.
      *
      * @throws ConfigDirectorValidationException Outside offline mode, when the server SDK key is
-     *     missing or blank, `$connection->url` is not an http or https URL, or
-     *     `$connection->storagePath` is not an absolute path. In every mode, when
-     *     `$connection->timeout` or a `$telemetry` setting is out of range, or when `$logLevel` is
-     *     not a PSR-3 level and no `$logger` is given.
+     *     missing or blank, `$connection->file` or `$connection->values` is given,
+     *     `$connection->url` is not an http or https URL, `$connection->storagePath` is not an
+     *     absolute path, or `$connection->timeout` is zero or less. In offline mode, when both
+     *     `$connection->file` and `$connection->values` are given, or `$connection->values` holds
+     *     a value the SDK cannot serve, such as `null`, a float that is not finite or an object
+     *     other than `stdClass`, or a blank config key. In every mode, when a `$telemetry` setting
+     *     is out of range, or when `$logLevel` is not a PSR-3 level and no `$logger` is given.
      */
     public static function createClient(
         ?string $serverSdkKey = null,

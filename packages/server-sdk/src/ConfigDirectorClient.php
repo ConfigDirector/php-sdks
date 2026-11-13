@@ -23,6 +23,14 @@ interface ConfigDirectorClient
      * arrive. It logs a warning when the wait reached the timeout, and nothing more when an
      * error already logged says why, such as a request ConfigDirector refused. On a disposed
      * client it logs a warning and the client stays not ready.
+     *
+     * In offline mode it makes the client ready with the values of `connection.values`, or with
+     * those of `connection.file`, which it reads again on every call. Without either, every read
+     * returns its in-code default value.
+     *
+     * @throws ConfigDirectorInitializationException In offline mode, when the values of
+     *     `connection.file` cannot be loaded, for a reason listed at {@see ConnectionOptions::$file}.
+     *     A client that had no values stays not ready, and one that had values keeps serving them.
      */
     public function initialize(): void;
 

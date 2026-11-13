@@ -11,16 +11,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - `ConfigDirector::createClient(...)` creates a `ConfigDirectorClient` from the named arguments
   `serverSdkKey`, `metadata`, `connection`, `logger`, `logLevel`, `telemetry` and `hooks`, without
-  making a network call or touching a file. It throws `ConfigDirectorValidationException` when the
-  server SDK key is missing or blank, `connection.url` is not an http or https URL or
-  `connection.storagePath` is not an absolute path, all three outside offline mode only, when
-  `connection.timeout` or `telemetry.flushInterval` is zero or less, or when
-  `telemetry.eventQueueLimit` is outside 100 to 100,000.
+  making a network call or touching a file. It throws `ConfigDirectorValidationException` when,
+  outside offline mode only, the server SDK key is missing or blank, `connection.file` or
+  `connection.values` is given, `connection.url` is not an http or https URL,
+  `connection.storagePath` is not an absolute path or `connection.timeout` is zero or less; when
+  `telemetry.flushInterval` is zero or less; or when `telemetry.eventQueueLimit` is outside 100 to
+  100,000.
 - The option objects `Metadata` (`appName`, `appVersion`), `ConnectionOptions` (`mode`,
   `pollingInterval` in seconds, `timeout` in milliseconds, `url`, `file`, `values`, `storagePath`),
   `TelemetryOptions` (`eventQueueLimit`, `flushInterval` in milliseconds) and `ClientHooks`, and the
   `ConnectionMode` enum with `Polling`, the default, and `Offline`. A `pollingInterval` below 60
   seconds is raised to 60 and a warning is logged.
+- In offline mode (`ConnectionMode::Offline`) the client needs no server SDK key, never connects
+  to ConfigDirector, creates no local store and sends nothing, so the application is invisible to
+  the ConfigDirector dashboard. It serves one value per config key to every context, without
+  targeting rules: the values of `connection.values`, or those of the JSON object in the file
+  `connection.file`, which `initialize()` reads on every call. Without either, every read returns
+  its in-code default value. `pollingInterval`, `timeout`, `url` and `storagePath` have no effect.
+- In offline mode a served value is a match (`found-match`) with no `valueId` and no `variation`,
+  a config key without a value returns its in-code default value with `config-state-missing`, and
+  `getAllConfigs` returns a `ConfigState` with the id `offline:<key>` for each value.
+  `initialize()` calls the `configsUpdated` handlers with every config key, then the watches, then
+  the `clientReady` handlers. A later call names in `keys` only the configs whose value changed in
+  the file, and in `removedKeys` those gone from it.
+- A value's config type follows from the value: a `bool` is a boolean config, an `int` an integer
+  config, a `float` a float config, served as plain decimal text such as `25` for `25.0` or
+  `0.0000001` for `1.0E-7`, a `string` a string config, and an array a JSON config, whether a list
+  or a map. A JSON object in the file stays a JSON object. An array can hold `null`, booleans,
+  numbers, strings, arrays and `stdClass` objects.
+- `createClient` throws `ConfigDirectorValidationException` in offline mode when both
+  `connection.file` and `connection.values` are given, or when `connection.values` has a blank
+  config key or holds a value the SDK cannot serve, such as `null`, a float that is not finite or
+  an object other than `stdClass`.
+- `ConfigDirectorInitializationException`, which `initialize()` throws in offline mode when
+  `connection.file` is a URL or another stream such as `php://`, is missing, cannot be read, does
+  not hold a JSON object, or holds a value the SDK cannot serve. A relative path is resolved against
+  the working directory. A client that had no values stays not ready, and one that had values
+  keeps serving them.
 - `initialize()` reads the values ConfigDirector serves and makes the client ready. The SDK keeps
   them in a local store, a folder shared by the PHP processes of one host, so a request reads them
   from there without connecting to ConfigDirector. When the local store is empty, `initialize()`
@@ -127,4 +154,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   more or less. A `logLevel` that is not a PSR-3 level throws `ConfigDirectorValidationException`.
   `logLevel` has no effect when a `logger` is given.
 - `ConfigDirectorException` is the base class of every exception of the SDK, including
-  `ConfigDirectorValidationException` and `ConfigDirectorConnectionException`.
+  `ConfigDirectorValidationException`, `ConfigDirectorInitializationException` and
+  `ConfigDirectorConnectionException`.

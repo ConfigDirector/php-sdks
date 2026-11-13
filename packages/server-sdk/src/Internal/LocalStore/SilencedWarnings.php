@@ -11,11 +11,18 @@ final class SilencedWarnings
      *
      * @param \Closure(): TResult $filesystemCall
      *
+     * @param-out string|null $lastWarning
+     *
      * @return TResult
      */
-    public static function during(\Closure $filesystemCall): mixed
+    public static function during(\Closure $filesystemCall, ?string &$lastWarning = null): mixed
     {
-        set_error_handler(static fn(): bool => true);
+        $lastWarning = null;
+        set_error_handler(static function (int $errorLevel, string $message) use (&$lastWarning): bool {
+            $lastWarning = $message;
+
+            return true;
+        });
         try {
             return $filesystemCall();
         } finally {

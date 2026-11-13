@@ -47,31 +47,42 @@ final class ClientFactory
         $connectionOptions ??= new ConnectionOptions();
         $telemetry ??= new TelemetryOptions();
         $logger ??= self::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
-        self::rejectUnusableTimeout($connectionOptions);
-        $serverSdkKeyToPollWith = match ($connectionOptions->mode) {
-            ConnectionMode::Offline => null,
-            ConnectionMode::Polling => self::serverSdkKeyOfAUsableConnection($serverSdkKey, $connectionOptions),
-        };
         self::rejectUnusableTelemetry($telemetry);
-        $eventHandlers = self::eventHandlersRegisteredFrom($hooks ?? new ClientHooks(), $logger);
+        $eventHandlers = new EventHandlers($logger);
+        $connection = match ($connectionOptions->mode) {
+            ConnectionMode::Offline => self::offlineConnectionServingTheValuesIn($connectionOptions),
+            ConnectionMode::Polling => self::connectionReadingTheLocalStore(
+                $sdkIdentity,
+                self::serverSdkKeyOfAUsableConnection($serverSdkKey, $connectionOptions),
+                $metadata,
+                $connectionOptions,
+                $telemetry,
+                $logger,
+                $eventHandlers,
+            ),
+        };
+        self::registerTheHooksIn($eventHandlers, $hooks ?? new ClientHooks(), $logger);
 
         return new DefaultConfigDirectorClient(
-            $serverSdkKeyToPollWith === null
-                ? new OfflineConnection()
-                : self::connectionReadingTheLocalStore(
-                    $sdkIdentity,
-                    $serverSdkKeyToPollWith,
-                    $metadata,
-                    $connectionOptions,
-                    $telemetry,
-                    $logger,
-                    $eventHandlers,
-                ),
+            $connection,
             $metadata,
             $connectionOptions->timeout,
             $logger,
             $eventHandlers,
         );
+    }
+
+    private static function offlineConnectionServingTheValuesIn(ConnectionOptions $connectionOptions): Connection
+    {
+        if ($connectionOptions->file !== null && $connectionOptions->values !== null) {
+            throw new ConfigDirectorValidationException(
+                "An offline connection takes either 'file' or 'values', not both.",
+            );
+        }
+
+        return $connectionOptions->file === null
+            ? OfflineConnection::servingTheValues($connectionOptions->values ?? [])
+            : OfflineConnection::servingTheValuesOfTheFile($connectionOptions->file);
     }
 
     private static function connectionReadingTheLocalStore(
@@ -113,9 +124,11 @@ final class ClientFactory
         );
     }
 
-    private static function eventHandlersRegisteredFrom(ClientHooks $hooks, LoggerInterface $logger): EventHandlers
-    {
-        $eventHandlers = new EventHandlers($logger);
+    private static function registerTheHooksIn(
+        EventHandlers $eventHandlers,
+        ClientHooks $hooks,
+        LoggerInterface $logger,
+    ): void {
         foreach (ClientEventName::cases() as $eventName) {
             foreach ($eventName->hooksIn($hooks) as $hook) {
                 if (is_callable($hook)) {
@@ -129,8 +142,6 @@ final class ClientFactory
                 }
             }
         }
-
-        return $eventHandlers;
     }
 
     private static function errorLogLoggerWritingFrom(string $logLevel): LoggerInterface
@@ -160,8 +171,15 @@ final class ClientFactory
                 'No server SDK key was provided, the client cannot be instantiated without a valid server SDK key',
             );
         }
+        if ($connectionOptions->file !== null || $connectionOptions->values !== null) {
+            throw new ConfigDirectorValidationException(
+                "The connection options 'file' and 'values' apply only when the connection mode is 'offline', but "
+                . "the mode is '{$connectionOptions->mode->value}'.",
+            );
+        }
         self::rejectUnusableBaseUrl($connectionOptions->url);
         self::rejectUnusableStoragePath($connectionOptions->storagePath);
+        self::rejectUnusableTimeout($connectionOptions);
 
         return $serverSdkKey;
     }
