@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Tests\Internal\Client;
 
+use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigsUpdatedEvent;
+use ConfigDirector\ConnectionErrorEvent;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
 use ConfigDirector\Internal\Client\EventHandlers;
@@ -14,6 +16,7 @@ use ConfigDirector\Internal\Connection\Connection;
 use ConfigDirector\Internal\Connection\ServerSdkPayload;
 use ConfigDirector\Internal\Evaluation\TargetingRules;
 use ConfigDirector\Metadata;
+use ConfigDirector\Tests\Support\CloseCountingConnection;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
@@ -82,6 +85,9 @@ final class DefaultConfigDirectorClientTest extends TestCase
 
                 return null;
             }
+
+            #[\Override]
+            public function close(): void {}
         };
         $client = new DefaultConfigDirectorClient(
             $connection,
@@ -148,6 +154,101 @@ final class DefaultConfigDirectorClientTest extends TestCase
         self::assertSame(['value-of-integer-config', 'fallback'], $values);
     }
 
+    public function testDisposeClosesTheConnection(): void
+    {
+        $connection = self::connectionCountingItsCloses();
+        $client = new DefaultConfigDirectorClient(
+            $connection,
+            new Metadata(),
+            250,
+            new RecordingLogger(),
+            new EventHandlers(new RecordingLogger()),
+        );
+
+        $client->dispose();
+
+        self::assertSame(1, $connection->timesClosed);
+    }
+
+    public function testDisposingTwiceClosesTheConnectionOnce(): void
+    {
+        $connection = self::connectionCountingItsCloses();
+        $client = new DefaultConfigDirectorClient(
+            $connection,
+            new Metadata(),
+            250,
+            new RecordingLogger(),
+            new EventHandlers(new RecordingLogger()),
+        );
+        $client->dispose();
+
+        $client->dispose();
+
+        self::assertSame(1, $connection->timesClosed);
+    }
+
+    public function testAClientThatIsNoLongerReferencedClosesItsConnection(): void
+    {
+        $connection = self::connectionCountingItsCloses();
+        $client = new DefaultConfigDirectorClient(
+            $connection,
+            new Metadata(),
+            250,
+            new RecordingLogger(),
+            new EventHandlers(new RecordingLogger()),
+        );
+
+        unset($client);
+
+        self::assertSame(1, $connection->timesClosed);
+    }
+
+    public function testAConnectionErrorDeliveredWhileTheConnectionClosesReachesAHandlerOfTheClient(): void
+    {
+        $eventHandlers = new EventHandlers(new RecordingLogger());
+        $error = new ConfigDirectorConnectionException('Connection failed with status: 401', 401);
+        $client = new DefaultConfigDirectorClient(
+            self::connectionCountingItsCloses(static function () use ($eventHandlers, $error): void {
+                $eventHandlers->deliverConnectionError($error);
+            }),
+            new Metadata(),
+            250,
+            new RecordingLogger(),
+            $eventHandlers,
+        );
+        $eventsReceived = [];
+        $client->on('connectionError', function (ConnectionErrorEvent $event) use (&$eventsReceived): void {
+            $eventsReceived[] = $event;
+        });
+
+        $client->dispose();
+
+        self::assertEquals([new ConnectionErrorEvent($error)], $eventsReceived);
+    }
+
+    public function testAReadInsideAConnectionErrorHandlerCalledWhileDisposingReturnsTheValueServed(): void
+    {
+        $eventHandlers = new EventHandlers(new RecordingLogger());
+        $client = new DefaultConfigDirectorClient(
+            self::connectionCountingItsCloses(static function () use ($eventHandlers): void {
+                $eventHandlers->deliverConnectionError(new ConfigDirectorConnectionException('refused', 401));
+            }),
+            new Metadata(),
+            250,
+            new RecordingLogger(),
+            $eventHandlers,
+        );
+        $client->initialize();
+        $valuesRead = [];
+        $client->on('connectionError', function () use ($client, &$valuesRead): void {
+            $valuesRead[] = $client->getValue('integer-config', 'fallback');
+        });
+
+        $client->dispose();
+
+        self::assertSame(['value-of-integer-config'], $valuesRead);
+    }
+
     private static function connectionDelivering(ServerSdkPayload ...$payloads): Connection
     {
         return new class (array_values($payloads)) implements Connection {
@@ -161,6 +262,9 @@ final class DefaultConfigDirectorClientTest extends TestCase
             {
                 return array_shift($this->payloads);
             }
+
+            #[\Override]
+            public function close(): void {}
         };
     }
 
@@ -187,6 +291,17 @@ final class DefaultConfigDirectorClientTest extends TestCase
             {
                 return null;
             }
+
+            #[\Override]
+            public function close(): void {}
         };
+    }
+
+    /**
+     * @param (\Closure(): void)|null $whileClosing
+     */
+    private static function connectionCountingItsCloses(?\Closure $whileClosing = null): CloseCountingConnection
+    {
+        return new CloseCountingConnection(self::payloadWith('integer-config'), $whileClosing);
     }
 }

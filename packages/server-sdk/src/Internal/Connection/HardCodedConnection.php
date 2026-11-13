@@ -23,6 +23,9 @@ final class HardCodedConnection implements Connection
         return new ServerSdkPayload($configs, []);
     }
 
+    #[\Override]
+    public function close(): void {}
+
     /**
      * @return list<ConfigDefinition>
      */

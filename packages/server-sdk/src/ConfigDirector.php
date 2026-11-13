@@ -9,6 +9,7 @@ use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
 use ConfigDirector\Internal\Client\EventHandlers;
 use ConfigDirector\Internal\Connection\HardCodedConnection;
 use ConfigDirector\Internal\Logging\ErrorLogLogger;
+use ConfigDirector\Internal\Polling\PollingInterval;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 
@@ -17,8 +18,6 @@ use Psr\Log\LogLevel;
  */
 final class ConfigDirector
 {
-    private const int MINIMUM_POLLING_INTERVAL_SECONDS = 60;
-
     private const int MINIMUM_EVENT_QUEUE_LIMIT = 100;
 
     private const int MAXIMUM_EVENT_QUEUE_LIMIT = 100_000;
@@ -68,7 +67,8 @@ final class ConfigDirector
         $logger ??= self::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
         self::rejectUnusableServerSdkKeyOrConnection($serverSdkKey, $connection);
         self::rejectUnusableTelemetry($telemetry ?? new TelemetryOptions());
-        self::warnOfAPollingIntervalBelowTheMinimum($connection, $logger);
+        $pollingInterval = PollingInterval::ofConfiguredSeconds($connection->pollingInterval);
+        self::warnOfAPollingIntervalRaisedToTheMinimum($pollingInterval, $connection, $logger);
 
         return new DefaultConfigDirectorClient(
             new HardCodedConnection(),
@@ -156,22 +156,19 @@ final class ConfigDirector
         }
     }
 
-    private static function warnOfAPollingIntervalBelowTheMinimum(
+    private static function warnOfAPollingIntervalRaisedToTheMinimum(
+        PollingInterval $pollingInterval,
         ConnectionOptions $connection,
         LoggerInterface $logger,
     ): void {
-        $pollsAtOrAboveTheMinimum = $connection->pollingInterval >= self::MINIMUM_POLLING_INTERVAL_SECONDS;
-        if ($connection->mode !== ConnectionMode::Polling || $pollsAtOrAboveTheMinimum) {
+        if ($connection->mode !== ConnectionMode::Polling || !$pollingInterval->isRaisedToTheMinimum) {
             return;
         }
 
         $logger->warning(
             '[ConfigDirectorClient] pollingInterval of {configuredSeconds} seconds is below the minimum of '
             . '{minimumSeconds} seconds. Using {minimumSeconds} seconds.',
-            [
-                'configuredSeconds' => $connection->pollingInterval,
-                'minimumSeconds' => self::MINIMUM_POLLING_INTERVAL_SECONDS,
-            ],
+            ['configuredSeconds' => $connection->pollingInterval, 'minimumSeconds' => $pollingInterval->seconds],
         );
     }
 }

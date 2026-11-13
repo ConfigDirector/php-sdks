@@ -18,6 +18,7 @@ final class RefreshLock
      */
     private function __construct(
         private mixed $lockFile,
+        private readonly string $storeFolder,
         private readonly PayloadFile $payloadFile,
         private readonly LoggerInterface $logger,
     ) {}
@@ -54,7 +55,7 @@ final class RefreshLock
             usleep(self::PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS);
         }
 
-        return new self($lockFile, new PayloadFile($storeFolder), $logger);
+        return new self($lockFile, $storeFolder, new PayloadFile($storeFolder), $logger);
     }
 
     public function replaceStoredPayload(StoredPayload $storedPayload): bool
@@ -69,6 +70,21 @@ final class RefreshLock
         }
 
         return $isReplaced;
+    }
+
+    public function recordPollingPause(string $polledUrl, PollingPause $pollingPause): bool
+    {
+        if ($this->lockFile === null) {
+            throw new \LogicException('A released refresh lock cannot record a polling pause.');
+        }
+
+        $pollingPauseFile = new PollingPauseFile($this->storeFolder, $polledUrl);
+        $isRecorded = $pollingPauseFile->replaceWith($pollingPause);
+        if (!$isRecorded) {
+            $this->logger->error(self::UNWRITABLE_FILE_MESSAGE, ['file' => $pollingPauseFile->path]);
+        }
+
+        return $isRecorded;
     }
 
     public function release(): void

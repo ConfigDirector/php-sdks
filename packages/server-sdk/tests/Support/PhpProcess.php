@@ -74,6 +74,13 @@ final class PhpProcess
         );
     }
 
+    public function stop(): void
+    {
+        proc_terminate($this->process);
+        fclose($this->standardOutput);
+        proc_close($this->process);
+    }
+
     public static function autoloadFile(): string
     {
         $classLoaderFile = (new \ReflectionClass(ClassLoader::class))->getFileName();

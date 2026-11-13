@@ -179,7 +179,8 @@ interface ConfigDirectorClient
     /**
      * Disposes of the client. Afterwards the client is not ready, every read returns its in-code
      * default value, and every handler, hook and watch is removed. It is safe to call more than
-     * once.
+     * once. You do not have to call it: the SDK disposes of the client when the script ends, after
+     * your own shutdown functions have run, or as soon as nothing refers to the client any longer.
      */
     public function dispose(): void;
 }

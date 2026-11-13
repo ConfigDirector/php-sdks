@@ -73,6 +73,14 @@ that a folder owned by another system user is refused runs only as the root user
 `make check-floor` runs as, and the test that a folder without write permission is refused runs only
 as any other user.
 
+The polling tests of the server SDK poll a scripted SDK server,
+`packages/server-sdk/tests/Support/Processes/scripted-sdk-server.php`, which runs as a process of its
+own on a local port, answers each request with the next answer of its script and records what it
+received. In `PollingRequestsTest` each request is a PHP process as well, started from
+`packages/server-sdk/tests/Internal/Polling/Processes/serve-a-request.php`. The test that a server
+whose certificate is not trusted is sent no poll needs the openssl extension and is skipped on
+Windows.
+
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.
 

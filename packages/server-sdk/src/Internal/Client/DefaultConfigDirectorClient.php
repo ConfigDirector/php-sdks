@@ -43,6 +43,12 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         $this->evaluator = new ConfigEvaluator();
         $this->invalidContextKinds = new InvalidContextKinds();
         $this->watches = new Watches();
+        ClientsDisposedAtShutdown::add($this);
+    }
+
+    public function __destruct()
+    {
+        $this->dispose();
     }
 
     #[\Override]
@@ -164,8 +170,13 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     #[\Override]
     public function dispose(): void
     {
-        $this->payload = null;
+        $isFirstDisposal = !$this->disposed;
         $this->disposed = true;
+        if ($isFirstDisposal) {
+            $this->connection->close();
+        }
+
+        $this->payload = null;
         $this->eventHandlers->removeAll();
         $this->watches->removeAll();
     }

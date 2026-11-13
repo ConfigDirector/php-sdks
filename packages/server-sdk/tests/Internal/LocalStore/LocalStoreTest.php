@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ConfigDirector\Tests\Internal\LocalStore;
 
 use ConfigDirector\Internal\LocalStore\LocalStore;
+use ConfigDirector\Internal\LocalStore\PollingPause;
+use ConfigDirector\Internal\LocalStore\RefreshLock;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\TemporaryFolder;
@@ -430,6 +432,250 @@ final class LocalStoreTest extends TestCase
         $refreshLock->replaceStoredPayload(new StoredPayload(['configs' => []], 1, 'session-1'));
     }
 
+    public function testANewStoreHoldsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseRecordedUnderTheRefreshLockIsReadBackByAnotherStoreObject(): void
+    {
+        $recordingStore = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        $refreshLock = $recordingStore->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+
+        $isRecorded = $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+        );
+        $refreshLock->release();
+
+        self::assertTrue($isRecorded);
+        self::assertEquals(
+            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+            LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger())
+                ->pollingPause('https://sdk.example.com/server/polling/v1'),
+        );
+    }
+
+    public function testAPollingPauseRecordedBeforeAPollIsAnsweredIsReadBackWithoutARefusalStatus(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        $refreshLock = $store->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+
+        $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 61_000, false, null),
+        );
+        $refreshLock->release();
+
+        self::assertEquals(
+            new PollingPause('session-1', 1_000, 61_000, false, null),
+            $store->pollingPause('https://sdk.example.com/server/polling/v1'),
+        );
+    }
+
+    public function testAPollingPauseIsKeptForTheUrlThatWasPolledOnly(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        $refreshLock = $store->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+
+        $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 61_000, true, 503),
+        );
+        $refreshLock->release();
+
+        self::assertNull($store->pollingPause('https://proxy.example.com/server/polling/v1'));
+    }
+
+    public function testThePollingPausesOfTwoUrlsAreKeptSideBySide(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        $refreshLock = $store->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+        $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+        );
+
+        $refreshLock->recordPollingPause(
+            'https://proxy.example.com/server/polling/v1',
+            new PollingPause('session-1', 2_000, 62_000, true, 503),
+        );
+        $refreshLock->release();
+
+        self::assertEquals(
+            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+            $store->pollingPause('https://sdk.example.com/server/polling/v1'),
+        );
+        self::assertEquals(
+            new PollingPause('session-1', 2_000, 62_000, true, 503),
+            $store->pollingPause('https://proxy.example.com/server/polling/v1'),
+        );
+    }
+
+    public function testAPollingPauseFileThatIsNotJsonIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents($this->pollingPauseFilePath(), 'not json');
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileWithoutASessionIdIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents($this->pollingPauseFilePath(), '{"recordedAt":1000,"until":61000,"pollFailed":true}');
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileWithAnEmptySessionIdIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents(
+            $this->pollingPauseFilePath(),
+            '{"sessionId":"","recordedAt":1000,"until":61000,"pollFailed":true}',
+        );
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileWithoutTheTimeItWasRecordedIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents($this->pollingPauseFilePath(), '{"sessionId":"session-1","until":61000,"pollFailed":true}');
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileWithoutTheTimeItEndsIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents(
+            $this->pollingPauseFilePath(),
+            '{"sessionId":"session-1","recordedAt":1000,"pollFailed":true}',
+        );
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileThatDoesNotSayWhetherThePollFailedIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents($this->pollingPauseFilePath(), '{"sessionId":"session-1","recordedAt":1000,"until":61000}');
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileWhoseRefusalStatusIsTextIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents(
+            $this->pollingPauseFilePath(),
+            '{"sessionId":"session-1","recordedAt":1000,"until":61000,"pollFailed":true,"refusalStatus":"401"}',
+        );
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseFileWhoseJsonIsNotAnObjectIsReadAsNoPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        file_put_contents($this->pollingPauseFilePath(), '"paused"');
+
+        self::assertNull($store->pollingPause('https://sdk.example.com/server/polling/v1'));
+    }
+
+    public function testAPollingPauseThatCannotBeRecordedLogsOneErrorNamingTheFile(): void
+    {
+        $logger = new RecordingLogger();
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger);
+        mkdir($this->pollingPauseFilePath());
+        $refreshLock = $store->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+
+        $isRecorded = $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 61_000, false, null),
+        );
+
+        self::assertFalse($isRecorded);
+        self::assertSame([['file' => $this->pollingPauseFilePath()]], $logger->contextsLoggedAt(LogLevel::ERROR));
+    }
+
+    public function testTheUrlThatWasPolledAppearsInNoFileName(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        $refreshLock = $store->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+
+        $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 61_000, false, null),
+        );
+        $refreshLock->release();
+
+        self::assertSame(
+            ['lock', 'polling-pause-61ca39bfb8a01128056fc5facbd3a3897271040f1ea1f94f615efde638de74ab.json'],
+            TemporaryFolder::entriesOf(dirname($this->pollingPauseFilePath())),
+        );
+    }
+
+    public function testAReleasedRefreshLockRefusesToRecordAPollingPause(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        $refreshLock = $store->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+        $refreshLock->release();
+
+        $this->expectException(\LogicException::class);
+
+        $refreshLock->recordPollingPause(
+            'https://sdk.example.com/server/polling/v1',
+            new PollingPause('session-1', 1_000, 61_000, false, null),
+        );
+    }
+
+    public function testTheFetchOfAnEmptyStoreIsGivenTheRefreshLockItRunsUnder(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+
+        $store->storedPayloadFilledWithin(
+            3_000,
+            static function (int $remainingMilliseconds, RefreshLock $refreshLock): null {
+                $refreshLock->recordPollingPause(
+                    'https://sdk.example.com/server/polling/v1',
+                    new PollingPause('session-1', 1_000, 61_000, false, null),
+                );
+
+                return null;
+            },
+        );
+
+        self::assertEquals(
+            new PollingPause('session-1', 1_000, 61_000, false, null),
+            $store->pollingPause('https://sdk.example.com/server/polling/v1'),
+        );
+    }
+
+    public function testAFetchedPayloadThatCannotBeStoredIsNotGivenToTheRequestThatFetchedIt(): void
+    {
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+        mkdir($this->payloadFilePath());
+
+        $filledPayload = $store->storedPayloadFilledWithin(
+            1_000,
+            static fn(): StoredPayload => new StoredPayload(['configs' => ['fetched' => []]], 1_000, 'session-1'),
+        );
+
+        self::assertNull($filledPayload);
+    }
+
     public function testAnEmptyStoreIsFilledWithTheFetchedPayload(): void
     {
         $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
@@ -544,6 +790,13 @@ final class LocalStoreTest extends TestCase
         );
 
         self::assertNotNull($store->refreshLockAcquiredWithin(0));
+    }
+
+    private function pollingPauseFilePath(): string
+    {
+        return $this->storagePath
+            . DIRECTORY_SEPARATOR . 'add45d3fbae45285dcd74320ecebb931a054c563edc414cd120865f8ff4e09f8'
+            . DIRECTORY_SEPARATOR . 'polling-pause-61ca39bfb8a01128056fc5facbd3a3897271040f1ea1f94f615efde638de74ab.json';
     }
 
     private function payloadFilePath(): string

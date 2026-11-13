@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Client;
 
+use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigEvaluatedEvent;
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigsUpdatedEvent;
+use ConfigDirector\ConnectionErrorEvent;
 use Psr\Log\LoggerInterface;
 
 final class EventHandlers
@@ -57,6 +59,11 @@ final class EventHandlers
     public function deliverConfigEvaluated(ConfigEvaluation $evaluation): void
     {
         $this->deliver(ClientEventName::ConfigEvaluated, [new ConfigEvaluatedEvent($evaluation)]);
+    }
+
+    public function deliverConnectionError(ConfigDirectorConnectionException $error): void
+    {
+        $this->deliver(ClientEventName::ConnectionError, [new ConnectionErrorEvent($error)]);
     }
 
     /**

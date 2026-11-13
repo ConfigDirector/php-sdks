@@ -15,6 +15,15 @@ final readonly class StoredPayload
         public string $sessionId,
     ) {}
 
+    public function epochMillisecondsFreshUntil(int $pollingIntervalMilliseconds, int $nowEpochMilliseconds): int
+    {
+        $wasConfirmedFreshByAClockSetBackSince = $this->confirmedFreshAtEpochMilliseconds > $nowEpochMilliseconds;
+
+        return $wasConfirmedFreshByAClockSetBackSince
+            ? 0
+            : $this->confirmedFreshAtEpochMilliseconds + $pollingIntervalMilliseconds;
+    }
+
     public function toJson(): string
     {
         return json_encode(

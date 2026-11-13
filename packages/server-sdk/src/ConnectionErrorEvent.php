@@ -10,7 +10,8 @@ namespace ConfigDirector;
 final readonly class ConnectionErrorEvent
 {
     /**
-     * @param \Throwable $error The error the connection failed with.
+     * @param \Throwable $error The error the connection failed with, a
+     *     {@see ConfigDirectorConnectionException}.
      */
     public function __construct(
         public \Throwable $error,

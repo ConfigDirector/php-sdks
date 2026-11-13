@@ -47,6 +47,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `dispose()` can be called more than once. Afterwards the client is not ready, every read returns
   its in-code default value with the reason `client-not-ready`, `getAllConfigs` is empty, and every
   event handler, hook and watch is removed.
+- A client disposes of itself, so calling `dispose()` is optional: when the script ends, after
+  the application's own shutdown functions have run, or as soon as nothing refers to the client any
+  longer, whichever comes first.
 - `on($eventName, $handler)` subscribes to the events `clientReady`, `configsUpdated`,
   `configEvaluated` and `connectionError`. `off($eventName, $handler)` removes that handler, or
   every handler of the event when no handler is given. An unknown event name throws
@@ -56,8 +59,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   and `removedKeys`, the keys no longer received. `configEvaluated` handlers receive a
   `ConfigEvaluatedEvent` with the `evaluation` of each `getValue`, `evaluate` and watch, before the
   read returns; `getAllConfigs` fires none. `connectionError` handlers receive a
-  `ConnectionErrorEvent` with the `error`; nothing fires it yet, because the client does not connect
-  to ConfigDirector yet.
+  `ConnectionErrorEvent` with the `error`, a `ConfigDirectorConnectionException` whose `status` is
+  the HTTP status ConfigDirector answered with; nothing fires it yet, because the client does not
+  connect to ConfigDirector yet.
 - `ClientHooks` takes one handler or a list of handlers for each event, as the named arguments
   `clientReady`, `configsUpdated`, `configEvaluated` and `connectionError`, registered before any
   event can fire. An entry of a list that is not callable is ignored and a warning is logged.
@@ -77,4 +81,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `error_log`, and `logLevel` takes a PSR-3 level, such as `Psr\Log\LogLevel::DEBUG`, to write
   more or less. A `logLevel` that is not a PSR-3 level throws `ConfigDirectorValidationException`.
   `logLevel` has no effect when a `logger` is given.
-- `ConfigDirectorException` is the base class of every exception the SDK throws.
+- `ConfigDirectorException` is the base class of every exception of the SDK, including
+  `ConfigDirectorValidationException` and `ConfigDirectorConnectionException`.

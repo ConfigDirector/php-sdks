@@ -49,6 +49,13 @@ final class LocalStore
         return null;
     }
 
+    public function pollingPause(string $polledUrl): ?PollingPause
+    {
+        return $this->usableFolder === null
+            ? null
+            : (new PollingPauseFile($this->usableFolder, $polledUrl))->pollingPause();
+    }
+
     public function refreshLockAcquiredWithin(int $timeoutMilliseconds): ?RefreshLock
     {
         return $this->usableFolder === null
@@ -57,7 +64,7 @@ final class LocalStore
     }
 
     /**
-     * @param \Closure(int $remainingMilliseconds): ?StoredPayload $fetchFreshPayload
+     * @param \Closure(int $remainingMilliseconds, RefreshLock $refreshLock): ?StoredPayload $fetchFreshPayload
      */
     public function storedPayloadFilledWithin(int $timeoutMilliseconds, \Closure $fetchFreshPayload): ?StoredPayload
     {
@@ -78,12 +85,9 @@ final class LocalStore
             }
 
             $waitedMilliseconds = intdiv(hrtime(true) - $startedAt, 1_000_000);
-            $freshPayload = $fetchFreshPayload(max(0, $timeoutMilliseconds - $waitedMilliseconds));
-            if ($freshPayload !== null) {
-                $refreshLock->replaceStoredPayload($freshPayload);
-            }
+            $freshPayload = $fetchFreshPayload(max(0, $timeoutMilliseconds - $waitedMilliseconds), $refreshLock);
 
-            return $freshPayload;
+            return $freshPayload !== null && $refreshLock->replaceStoredPayload($freshPayload) ? $freshPayload : null;
         } finally {
             $refreshLock->release();
         }
