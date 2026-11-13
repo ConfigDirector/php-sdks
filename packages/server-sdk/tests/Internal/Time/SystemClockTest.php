@@ -24,7 +24,10 @@ final class SystemClockTest extends TestCase
         $clock = new SystemClock();
         $readingBefore = $clock->monotonicMilliseconds();
 
-        usleep(50_000);
+        $deadline = hrtime(true) + 50_000_000;
+        while (hrtime(true) < $deadline) {
+            usleep(1_000);
+        }
         $millisecondsPassed = $clock->monotonicMilliseconds() - $readingBefore;
 
         self::assertGreaterThanOrEqual(50, $millisecondsPassed);
