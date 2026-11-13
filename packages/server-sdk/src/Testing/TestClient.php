@@ -8,6 +8,7 @@ use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\Internal\Connection\InMemoryConnection;
+use ConfigDirector\Internal\Telemetry\TrackedEventRecordingTelemetry;
 
 /**
  * The SDK's real client over an in-memory connection that the test controls. Create one with
@@ -38,6 +39,7 @@ final class TestClient
     public function __construct(
         public readonly ConfigDirectorClient $client,
         private readonly InMemoryConnection $connection,
+        private readonly TrackedEventRecordingTelemetry $telemetry,
     ) {}
 
     /**
@@ -127,5 +129,31 @@ final class TestClient
     public function failInitialization(): void
     {
         $this->connection->failInitialization();
+    }
+
+    /**
+     * Every event the code under test tracked through the client with `track()`, in call order,
+     * as the SDK would report it: an event whose name does not have 1 to 150 characters is not
+     * recorded, a value or details the SDK would leave out are `null` in the record, and a context
+     * whose kind is invalid is not recorded with its event. Each event the SDK would not report as
+     * it was tracked logs a warning. The limit of 1,000 events per telemetry report does not
+     * apply, and nothing is recorded after the client's `dispose()`. {@see replaceValues()} leaves
+     * the record as it is.
+     *
+     * @return list<TrackedEvent> A copy of the record: later events are not added to it, so call
+     *     this method again to see them.
+     */
+    public function trackedEvents(): array
+    {
+        return $this->telemetry->trackedEvents();
+    }
+
+    /**
+     * Forgets every tracked event recorded so far. Use it with {@see replaceValues()} to reset a
+     * test client shared across tests.
+     */
+    public function clearTrackedEvents(): void
+    {
+        $this->telemetry->clearTrackedEvents();
     }
 }

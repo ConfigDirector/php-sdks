@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use ConfigDirector\Context;
 use ConfigDirector\Testing\ConfigDirectorTesting;
 use Psr\Log\NullLogger;
 
@@ -31,5 +32,7 @@ echo 'max-items: ' . var_export($testClient->client->getValue('max-items', 0), t
 $testClient->failInitialization();
 $testClient->client->initialize();
 $testClient->client->getAllConfigs();
+$testClient->client->track('checkout-completed', new Context(id: 'user-42'), value: 49.9, details: ['plan' => 'pro']);
+echo 'tracked: ' . count($testClient->trackedEvents()) . "\n";
 $testClient->client->dispose();
 echo "disposed\n";

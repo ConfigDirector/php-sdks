@@ -81,6 +81,18 @@ final class LocalStoreTelemetry implements ClientTelemetry
     }
 
     #[\Override]
+    public function recordTrackedEvent(TrackCall $call, \Closure $admittedContextOf): void
+    {
+        $warnings = $this->telemetryOfThisClient->keepTrackedEvent(
+            TrackedEventAdmission::of($call, $admittedContextOf($call->context)),
+            $this->clock->epochMilliseconds(),
+        );
+        foreach ($warnings as $warning) {
+            $this->warnAboutTrackedEvents($warning);
+        }
+    }
+
+    #[\Override]
     public function storeAndSendWhatIsDueInALongRunningProcess(): void
     {
         $nowMonotonicMilliseconds = $this->clock->monotonicMilliseconds();
@@ -174,6 +186,9 @@ final class LocalStoreTelemetry implements ClientTelemetry
         if ($report->isEmpty()) {
             return;
         }
+        if ($report->trackedEventsLeftOut() > 0) {
+            $this->warnAboutTrackedEvents(TrackedEventWarning::ReportAlreadyFull);
+        }
 
         $answer = $this->endpoint->answerToAReportOf($report, $now);
         match ($answer->kind) {
@@ -225,6 +240,14 @@ final class LocalStoreTelemetry implements ClientTelemetry
             );
             $telemetryLock->discardStoredTelemetry();
         });
+    }
+
+    private function warnAboutTrackedEvents(TrackedEventWarning $warning): void
+    {
+        $this->logger->warning(
+            $warning->message() . ' Further tracked events like it are not logged until the next telemetry batch is '
+            . 'sent.',
+        );
     }
 
     private function countAsDropped(CollectedTelemetry $unsentReport, LocalStore $store): void

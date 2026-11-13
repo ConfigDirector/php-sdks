@@ -13,6 +13,7 @@ use ConfigDirector\ConnectionErrorEvent;
 use ConfigDirector\Context;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Testing\ConfigDirectorTesting;
+use ConfigDirector\Testing\TrackedEvent;
 use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\TemporaryFolder;
@@ -340,7 +341,7 @@ final class TestClientTest extends TestCase
             ],
         )->finished()->output;
 
-        self::assertSame("new-checkout: false\nmax-items: 30\ndisposed\n", $output);
+        self::assertSame("new-checkout: false\nmax-items: 30\ntracked: 1\ndisposed\n", $output);
         self::assertSame([], TemporaryFolder::entriesOf($this->folder));
     }
 
@@ -846,5 +847,165 @@ final class TestClientTest extends TestCase
             ],
             $deliveries,
         );
+    }
+
+    public function testTrackedEventsAreRecordedInCallOrderWithTheirContextValueAndDetails(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+        $context = new Context(id: 'user-1', kind: 'user');
+
+        $testClient->client->track('checkout-started', $context);
+        $testClient->client->track('checkout-completed', $context, value: 49.9, details: ['plan' => 'pro']);
+
+        self::assertEquals(
+            [
+                new TrackedEvent('checkout-started', $context, null, null),
+                new TrackedEvent('checkout-completed', $context, 49.9, ['plan' => 'pro']),
+            ],
+            $testClient->trackedEvents(),
+        );
+        self::assertSame($context, $testClient->trackedEvents()[1]->context);
+    }
+
+    public function testAnEventTrackedWithoutAContextIsRecordedWithoutOne(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+
+        $testClient->client->track('nightly-import-finished');
+
+        self::assertEquals(
+            [new TrackedEvent('nightly-import-finished', null, null, null)],
+            $testClient->trackedEvents(),
+        );
+    }
+
+    public function testAnEventWhoseNameHasOneHundredAndFiftyOneCharactersIsNotRecordedAndLogsAWarning(): void
+    {
+        $logger = new RecordingLogger();
+        $testClient = ConfigDirectorTesting::createTestClient(logger: $logger);
+
+        $testClient->client->track(str_repeat('n', 151));
+
+        self::assertSame([], $testClient->trackedEvents());
+        self::assertCount(1, $logger->contextsLoggedAt('warning'));
+    }
+
+    public function testAnEventIsRecordedWithoutDetailsOfTwentyOneTopLevelKeysAndLogsAWarning(): void
+    {
+        $logger = new RecordingLogger();
+        $testClient = ConfigDirectorTesting::createTestClient(logger: $logger);
+        $details = [];
+        foreach (range(1, 21) as $number) {
+            $details["key-{$number}"] = $number;
+        }
+
+        $testClient->client->track('checkout-completed', new Context(id: 'user-1'), value: 49.9, details: $details);
+
+        self::assertEquals(
+            [new TrackedEvent('checkout-completed', new Context(id: 'user-1'), 49.9, null)],
+            $testClient->trackedEvents(),
+        );
+        self::assertCount(1, $logger->contextsLoggedAt('warning'));
+    }
+
+    public function testAnEventIsRecordedWithoutAValueThatIsNotFiniteAndLogsAWarning(): void
+    {
+        $logger = new RecordingLogger();
+        $testClient = ConfigDirectorTesting::createTestClient(logger: $logger);
+
+        $testClient->client->track('checkout-completed', value: INF, details: ['plan' => 'pro']);
+
+        self::assertEquals(
+            [new TrackedEvent('checkout-completed', null, null, ['plan' => 'pro'])],
+            $testClient->trackedEvents(),
+        );
+        self::assertCount(1, $logger->contextsLoggedAt('warning'));
+    }
+
+    public function testEveryEventTheSdkWouldNotReportAsItWasTrackedLogsAWarning(): void
+    {
+        $logger = new RecordingLogger();
+        $testClient = ConfigDirectorTesting::createTestClient(logger: $logger);
+
+        $testClient->client->track('');
+        $testClient->client->track('');
+
+        self::assertCount(2, $logger->contextsLoggedAt('warning'));
+    }
+
+    public function testMoreThanOneThousandEventsAreRecorded(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+
+        foreach (range(1, 1_001) as $number) {
+            $testClient->client->track("event-{$number}");
+        }
+
+        self::assertCount(1_001, $testClient->trackedEvents());
+        self::assertSame('event-1001', $testClient->trackedEvents()[1_000]->name);
+    }
+
+    public function testAnEventTrackedForAContextWithAnInvalidKindIsRecordedWithoutTheContext(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+
+        $testClient->client->track('checkout-completed', new Context(id: 'acme', kind: 'Tenant'));
+
+        self::assertEquals(
+            [new TrackedEvent('checkout-completed', null, null, null)],
+            $testClient->trackedEvents(),
+        );
+    }
+
+    public function testDetailsAreRecordedAsTheSdkWouldSendThem(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+        $coupon = new class implements \JsonSerializable {
+            #[\Override]
+            public function jsonSerialize(): string
+            {
+                return 'SPRING-10';
+            }
+        };
+
+        $testClient->client->track('checkout-completed', details: ['coupon' => $coupon, 'discount' => 0.1]);
+
+        self::assertSame(['coupon' => 'SPRING-10', 'discount' => 0.1], $testClient->trackedEvents()[0]->details);
+    }
+
+    public function testNothingIsRecordedAfterTheClientIsDisposed(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+        $testClient->client->track('checkout-started');
+
+        $testClient->client->dispose();
+        $testClient->client->track('checkout-completed');
+
+        self::assertSame(['checkout-started'], array_column($testClient->trackedEvents(), 'name'));
+    }
+
+    public function testClearTrackedEventsForgetsTheEventsRecordedSoFar(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+        $testClient->client->track('checkout-started');
+
+        $testClient->clearTrackedEvents();
+        $testClient->client->track('checkout-completed');
+
+        self::assertSame(['checkout-completed'], array_column($testClient->trackedEvents(), 'name'));
+    }
+
+    public function testReplaceValuesLeavesTheTrackedEventsAsTheyAre(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(
+            values: ['max-items' => 20],
+            logger: new RecordingLogger(),
+        );
+        $testClient->client->initialize();
+        $testClient->client->track('checkout-started');
+
+        $testClient->replaceValues(['max-items' => 30]);
+
+        self::assertSame(['checkout-started'], array_column($testClient->trackedEvents(), 'name'));
     }
 }

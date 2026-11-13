@@ -151,6 +151,44 @@ interface ConfigDirectorClient
     public function unwatchAll(): void;
 
     /**
+     * Reports to ConfigDirector that something happened, such as a completed checkout, so it can
+     * be counted. The event is sent with the host's next telemetry report. It never throws, and it
+     * does nothing in offline mode or after {@see dispose()}.
+     *
+     * An event counts for an experiment only when it is tracked for a context with an `id`, the
+     * one the experiment's config was evaluated for. Without a context, or for a context without an
+     * `id`, the event is still reported. The `id` of an anonymous context is not sent. A context
+     * with an invalid kind is logged as it is for a read, and the event is sent without a context.
+     *
+     * A client holds at most 1,000 tracked events until it adds them to the telemetry kept in the
+     * local store, and a telemetry report holds at most 1,000; events beyond that are not reported.
+     * Each cause of an event being dropped, or sent without its value or details, logs one warning
+     * until the client next adds its telemetry to the local store: once per request, or once per
+     * telemetry flush interval in a long-lived client.
+     *
+     * A long-lived client, one that has lived longer than the telemetry flush interval as in a
+     * queue worker, adds its telemetry to the local store once per flush interval, in the read or
+     * the call to this method that finds it due. When the host's telemetry report is due too, that
+     * call sends it and waits up to 5 seconds for the answer.
+     *
+     * @param string $eventName The name of the event, 1 to 150 characters. An event with any other
+     *     name is not reported.
+     * @param Context|null $context The context the event happened for.
+     * @param float|null $value A number the event measures, such as an amount of money, a count or
+     *     a duration. A value that is not finite is left out and the event is still reported.
+     * @param array<array-key, mixed>|null $details Details of the event, such as the plan a
+     *     customer chose, written as a JSON object. Details that are a list, have more than 20
+     *     top-level keys, are larger than 1,024 bytes as JSON or cannot be written as JSON are left
+     *     out and the event is still reported. An empty array is sent as an empty object.
+     */
+    public function track(
+        string $eventName,
+        ?Context $context = null,
+        ?float $value = null,
+        ?array $details = null,
+    ): void;
+
+    /**
      * Registers a handler for one of the events the client emits. A handler registered twice is
      * called twice.
      *
@@ -207,10 +245,10 @@ interface ConfigDirectorClient
      * once. You do not have to call it: the SDK disposes of the client when the script ends, after
      * your own shutdown functions have run, or as soon as nothing refers to the client any longer.
      *
-     * Disposing adds what the client evaluated to the telemetry kept in the local store. When the
-     * host's telemetry report is due, this call sends it and waits up to 5 seconds for the
-     * answer, so under PHP-FPM call `fastcgi_finish_request()` first when the response should
-     * not wait for it.
+     * Disposing adds what the client evaluated and tracked to the telemetry kept in the local
+     * store. When the host's telemetry report is due, this call sends it and waits up to 5 seconds
+     * for the answer, so under PHP-FPM call `fastcgi_finish_request()` first when the response
+     * should not wait for it.
      */
     public function dispose(): void;
 }

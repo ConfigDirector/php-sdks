@@ -6,6 +6,7 @@ namespace ConfigDirector\Internal\Telemetry;
 
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigState;
+use ConfigDirector\Context;
 use ConfigDirector\Internal\Value\InCodeDefaultValue;
 
 interface ClientTelemetry
@@ -20,6 +21,11 @@ interface ClientTelemetry
     ): void;
 
     public function recordInvalidContextKind(string $kindSample): InvalidContextKindRecording;
+
+    /**
+     * @param \Closure(?Context): ?Context $admittedContextOf
+     */
+    public function recordTrackedEvent(TrackCall $call, \Closure $admittedContextOf): void;
 
     public function storeAndSendWhatIsDueInALongRunningProcess(): void;
 

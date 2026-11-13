@@ -422,6 +422,58 @@ final class ClientTelemetryOverTimeTest extends TestCase
         self::assertLessThan(1_000, $millisecondsTheDisposalTook);
     }
 
+    public function testATrackedEventIsReportedWithTheTimeItWasTracked(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $client = $this->clientThatOpenedTheLocalStore($server);
+        $this->clock->epochMilliseconds += 1_234;
+        $client->track('checkout-completed');
+        $client->dispose();
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS;
+
+        $this->aRequestEnds($server);
+
+        self::assertSame(
+            [[['name' => 'checkout-completed', 'happenedAt' => '2026-11-12T12:00:01.234Z']]],
+            self::trackedEventsReportedTo($server),
+        );
+    }
+
+    public function testAClientOlderThanTheFlushIntervalSendsItsTrackedEventsInTheTrackThatFindsThemDue(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $client = $this->clientThatOpenedTheLocalStore($server);
+        $client->track('checkout-started');
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS + 1;
+
+        $client->track('checkout-completed');
+
+        self::assertSame(
+            [['checkout-started', 'checkout-completed']],
+            array_map(
+                static fn(array $trackedEvents): array => array_column($trackedEvents, 'name'),
+                self::trackedEventsReportedTo($server),
+            ),
+        );
+    }
+
+    public function testAClientOfALongRunningProcessLogsATrackedEventWarningAgainOnceItMovedItsTelemetryToTheLocalStore(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $client = $this->clientThatOpenedTheLocalStore($server);
+        $client->track('');
+        $client->track('');
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS + 1;
+        $client->getValue('page-size', 10);
+        $warningsLoggedBeforeTheNextTrack = count($this->logger->contextsLoggedAt(LogLevel::WARNING));
+
+        $client->track('');
+        $client->track('');
+
+        self::assertSame(1, $warningsLoggedBeforeTheNextTrack);
+        self::assertCount(2, $this->logger->contextsLoggedAt(LogLevel::WARNING));
+    }
+
     /**
      * @param list<ScriptedAnswer> $answersToReports
      */
@@ -490,6 +542,22 @@ final class ClientTelemetryOverTimeTest extends TestCase
         }
 
         return $startTimeOfEachReport;
+    }
+
+    /**
+     * @return list<list<mixed>>
+     */
+    private static function trackedEventsReportedTo(ScriptedSdkServer $server): array
+    {
+        $trackedEventsOfEachReport = [];
+        foreach ($server->requestsReceived() as $report) {
+            self::assertIsArray($report['body']);
+            self::assertIsArray($report['body']['discreteEvents']);
+            self::assertIsArray($report['body']['discreteEvents']['trackedEvents']);
+            $trackedEventsOfEachReport[] = array_values($report['body']['discreteEvents']['trackedEvents']);
+        }
+
+        return $trackedEventsOfEachReport;
     }
 
     /**

@@ -92,7 +92,13 @@ for (;;) {
     file_put_contents(
         $requestsFile,
         json_encode(
-            ['method' => $method, 'path' => $path, 'headers' => $headers, 'body' => json_decode($body, true)],
+            [
+                'method' => $method,
+                'path' => $path,
+                'headers' => $headers,
+                'body' => json_decode($body, true),
+                'bodyText' => $body,
+            ],
             JSON_THROW_ON_ERROR,
         ) . "\n",
         FILE_APPEND | LOCK_EX,

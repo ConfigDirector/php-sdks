@@ -24,6 +24,7 @@ use ConfigDirector\Internal\Telemetry\ClientTelemetry;
 use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
 use ConfigDirector\Internal\Telemetry\LocalStoreTelemetry;
 use ConfigDirector\Internal\Telemetry\TelemetryEndpoint;
+use ConfigDirector\Internal\Telemetry\TrackedEventRecordingTelemetry;
 use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Internal\Time\SystemClock;
 use ConfigDirector\Metadata;
@@ -92,6 +93,7 @@ final class ClientFactory
         $timeout ??= (new ConnectionOptions())->timeout;
         self::rejectUnusableTimeout($timeout);
         $eventHandlers = new EventHandlers($logger);
+        $telemetry = new TrackedEventRecordingTelemetry($logger);
         $connection = InMemoryConnection::servingTheValues(
             $values ?? [],
             $timeout,
@@ -104,11 +106,11 @@ final class ClientFactory
             $timeout,
             $logger,
             $eventHandlers,
-            new DiscardedTelemetry(),
+            $telemetry,
         );
         $connection->deliverPayloadsTo($client->takeIn(...));
 
-        return new TestClient($client, $connection);
+        return new TestClient($client, $connection, $telemetry);
     }
 
     private static function offlineConnectionServingTheValuesIn(ConnectionOptions $connectionOptions): Connection

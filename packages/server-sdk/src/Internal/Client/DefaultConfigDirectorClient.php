@@ -19,6 +19,7 @@ use ConfigDirector\Internal\Evaluation\ServedValue;
 use ConfigDirector\Internal\Telemetry\ClientTelemetry;
 use ConfigDirector\Internal\Telemetry\InvalidContextKindRecording;
 use ConfigDirector\Internal\Telemetry\InvalidContextSubmissions;
+use ConfigDirector\Internal\Telemetry\TrackCall;
 use ConfigDirector\Internal\Value\InCodeDefaultValue;
 use ConfigDirector\Internal\Value\TypedValue;
 use ConfigDirector\Metadata;
@@ -167,6 +168,24 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     public function unwatchAll(): void
     {
         $this->watches->removeAll();
+    }
+
+    #[\Override]
+    public function track(
+        string $eventName,
+        ?Context $context = null,
+        ?float $value = null,
+        ?array $details = null,
+    ): void {
+        if ($this->disposed) {
+            return;
+        }
+
+        $this->telemetry->recordTrackedEvent(
+            new TrackCall($eventName, $context, $value, $details),
+            $this->admittedContextOrNone(...),
+        );
+        $this->telemetry->storeAndSendWhatIsDueInALongRunningProcess();
     }
 
     #[\Override]

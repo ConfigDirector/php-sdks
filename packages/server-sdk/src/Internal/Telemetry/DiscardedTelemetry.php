@@ -24,6 +24,9 @@ final class DiscardedTelemetry implements ClientTelemetry
     }
 
     #[\Override]
+    public function recordTrackedEvent(TrackCall $call, \Closure $admittedContextOf): void {}
+
+    #[\Override]
     public function storeAndSendWhatIsDueInALongRunningProcess(): void {}
 
     #[\Override]

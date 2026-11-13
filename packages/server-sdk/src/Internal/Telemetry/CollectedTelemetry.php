@@ -19,6 +19,8 @@ final class CollectedTelemetry
 
     private InvalidContextSubmissions $invalidContextSubmissions;
 
+    private TrackedEventQueue $trackedEventQueue;
+
     private int $droppedEvaluations = 0;
 
     private int $droppedCapturedContexts = 0;
@@ -28,6 +30,7 @@ final class CollectedTelemetry
         $this->evaluationCountsByEventJson = new NewestEntries(intdiv($eventQueueLimit * 7 + 9, 10));
         $this->capturedContextJsonsByKindAndIdentifier = new NewestEntries(intdiv($eventQueueLimit * 3, 10));
         $this->invalidContextSubmissions = new InvalidContextSubmissions();
+        $this->trackedEventQueue = new TrackedEventQueue();
     }
 
     public function countEvaluations(string $eventJson, int $count): void
@@ -55,6 +58,21 @@ final class CollectedTelemetry
         return $this->invalidContextSubmissions->countSubmissions($kindSample, $count);
     }
 
+    /**
+     * @return list<TrackedEventWarning>
+     */
+    public function keepTrackedEvent(
+        AdmittedTrackedEvent|DroppedTrackedEvent $admission,
+        int $happenedAtEpochMilliseconds,
+    ): array {
+        return $this->trackedEventQueue->keepTrackedEvent($admission, $happenedAtEpochMilliseconds);
+    }
+
+    public function trackedEventsLeftOut(): int
+    {
+        return $this->trackedEventQueue->entriesLeftOut();
+    }
+
     public function countAsDropped(int $evaluations, int $capturedContexts): void
     {
         $this->droppedEvaluations += $evaluations;
@@ -65,7 +83,8 @@ final class CollectedTelemetry
     {
         return $this->evaluationsCollected() === 0
             && $this->capturedContextsCollected() === 0
-            && $this->invalidContextSubmissions->countsByKindSample() === [];
+            && $this->invalidContextSubmissions->countsByKindSample() === []
+            && $this->trackedEventQueue->entryJsons() === [];
     }
 
     public function evaluationsCollected(): int
@@ -97,6 +116,7 @@ final class CollectedTelemetry
                 'invalidContextCountBeyondTheSampleLimit' => $invalidContextSubmissions->countBeyondTheSampleLimit(),
                 'droppedEvaluations' => $this->droppedEvaluations,
                 'droppedCapturedContexts' => $this->droppedCapturedContexts,
+                'trackedEvents' => $this->trackedEventQueue->entryJsons(),
             ],
             self::JSON_FLAGS,
         );
@@ -133,6 +153,12 @@ final class CollectedTelemetry
         foreach (self::countsIn([$countBeyondTheSampleLimit]) as $count) {
             $this->countInvalidContexts(null, $count);
         }
+        $trackedEvents = $telemetryOfAClient['trackedEvents'] ?? null;
+        foreach (is_array($trackedEvents) ? $trackedEvents : [] as $entryJson) {
+            if (is_string($entryJson) && self::isAJsonObject($entryJson)) {
+                $this->trackedEventQueue->keepEntryUnlessFull($entryJson);
+            }
+        }
         $this->countAsDropped(
             array_sum(self::countsIn([$telemetryOfAClient['droppedEvaluations'] ?? null])),
             array_sum(self::countsIn([$telemetryOfAClient['droppedCapturedContexts'] ?? null])),
@@ -144,8 +170,8 @@ final class CollectedTelemetry
      */
     public function reportJson(string $serverSdkKey, array $metaContext, int $reportedAtEpochMilliseconds): string
     {
-        $startTime = self::timestampOf($this->collectingSinceEpochMilliseconds);
-        $endTime = self::timestampOf($reportedAtEpochMilliseconds);
+        $startTime = ReportedTime::of($this->collectingSinceEpochMilliseconds);
+        $endTime = ReportedTime::of($reportedAtEpochMilliseconds);
         $aggregatedEntryJson = static fn(int $count, string $eventJson): string => sprintf(
             '{"startTime":"%s","endTime":"%s","count":%d,"event":%s}',
             $startTime,
@@ -173,12 +199,13 @@ final class CollectedTelemetry
         }
 
         return sprintf(
-            '{"serverSdkKey":%s,"metaContext":%s,"discreteEvents":{"capturedContexts":[%s]},'
+            '{"serverSdkKey":%s,"metaContext":%s,"discreteEvents":{"capturedContexts":[%s],"trackedEvents":[%s]},'
             . '"aggregatedEvents":{"evaluatedConfig":[%s],"invalidContext":[%s]},'
             . '"droppedEvents":{"evaluatedConfig":%d,"capturedContexts":%d}}',
             json_encode($serverSdkKey, self::JSON_FLAGS),
             json_encode($metaContext, self::JSON_FLAGS),
             implode(',', $this->capturedContextJsonsByKindAndIdentifier->entriesByKey()),
+            implode(',', $this->trackedEventQueue->entryJsons()),
             implode(',', $evaluatedConfig),
             implode(',', $invalidContext),
             $this->droppedEvaluations,
@@ -204,11 +231,5 @@ final class CollectedTelemetry
     private static function isAJsonObject(string $text): bool
     {
         return str_starts_with($text, '{') && json_validate($text);
-    }
-
-    private static function timestampOf(int $epochMilliseconds): string
-    {
-        return gmdate('Y-m-d\TH:i:s', intdiv($epochMilliseconds, 1_000))
-            . sprintf('.%03dZ', $epochMilliseconds % 1_000);
     }
 }

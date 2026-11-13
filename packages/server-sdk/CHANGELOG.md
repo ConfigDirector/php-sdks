@@ -122,23 +122,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   sent, and its evaluations name no context. A context with an invalid kind is counted under the
   first 128 characters of that kind, and nothing else of it is sent.
 - A host sends its telemetry once per `telemetry.flushInterval`, however many requests it serves.
-  When a client is disposed of it adds what it evaluated to the local store, without a request to
-  ConfigDirector. The first request to end at least a flush interval after the host's last
+  When a client is disposed of it adds what it evaluated and tracked to the local store, without a
+  request to ConfigDirector. The first request to end at least a flush interval after the host's last
   report, or after its first client was created when it has sent none, sends what every process
   stored as one report, after it has asked for values when that is due too. It waits up to 5
   seconds for the answer, so under PHP-FPM the end of the response waits as well unless the
-  application has called `fastcgi_finish_request()`. A client that was never initialized and read
-  nothing creates no local store and sends nothing.
+  application has called `fastcgi_finish_request()`. A client that was never initialized, read
+  nothing and tracked nothing creates no local store and sends nothing.
 - A client that has lived longer than `telemetry.flushInterval`, as in a queue worker, adds what
-  it evaluated to the local store once per flush interval, during the read that finds it due, and
-  sends the host's report in that read when it is due, waiting up to 5 seconds for the answer.
-  Disposing of such a client sends what the local store holds at once.
+  it evaluated and tracked to the local store once per flush interval, during the read or the
+  `track()` call that finds it due, and sends the host's report in that call when it is due,
+  waiting up to 5 seconds for the answer. Disposing of such a client sends what the local store
+  holds at once.
 - `telemetry.eventQueueLimit` limits what one report holds, and what one client holds until it is
   disposed of: 70% of it, rounded up, for evaluations, where reads of one config that return the
   same result for the same context are one entry with a count, and 30%, rounded down, for
   contexts. The oldest entries over the limit are left out, and ConfigDirector receives a count
   of them. The telemetry kept in the local store is limited to 8 MiB, and what no longer fits is
   counted as dropped too.
+- `track($eventName, $context, value:, details:)` reports that something happened, such as a
+  completed checkout, with the host's next telemetry report, under the name, the context's kind
+  and `id`, the value, the details and the time of the call. It never throws, and does nothing in
+  offline mode or after `dispose()`. The context's `id` is sent only when it is not empty and the
+  context is not anonymous, a context with an invalid kind is logged and counted as for a read and
+  the event is sent without it, and the context is not sent with its name and traits.
+- `track()` drops an event whose name does not have 1 to 150 characters. It sends an event without
+  its value when the value is not finite, and without its details when they are a list, have more
+  than 20 top-level keys, are larger than 1,024 bytes as JSON or cannot be written as JSON. An
+  empty details array is sent as an empty object. A client holds at most 1,000 tracked events until
+  it adds them to the local store, and a report holds at most 1,000: the first ones the host's
+  requests tracked. Each cause logs one
+  warning until the client next adds its telemetry to the local store, and the request that sends
+  a report logs one warning when the host tracked more than a report holds.
 - When ConfigDirector refuses a telemetry report with a 4xx status other than 413 and 429, no
   process of the host collects or sends telemetry for one hour, and the process that sent the
   report logs one warning. No `connectionError` handler is called. A report answered with any
@@ -224,3 +239,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   logged and the `connectionError` handlers receive a `ConfigDirectorConnectionException` with the
   status 401. In both cases a client that was not ready stays not ready, and one that was ready
   keeps serving the values it had, until the next `initialize()` serves the values.
+- `trackedEvents()` returns a copy of the events the code under test tracked through a test
+  client's client, in call order, each a `ConfigDirector\Testing\TrackedEvent` with `name`,
+  `context`, `value` and `details`, as the SDK would report them: an event the SDK would drop is
+  not recorded, a value or details it would leave out are `null`, a context with an invalid kind is
+  `null`, and details are recorded as the SDK would send them, read back as arrays. Each event the
+  SDK would not report as it was tracked logs a warning, the limit of 1,000 events does not apply,
+  nothing is recorded after `dispose()`, and nothing is sent. `clearTrackedEvents()` forgets them,
+  and `replaceValues` leaves them as they are.

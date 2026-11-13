@@ -76,7 +76,7 @@ final class ScriptedSdkServer
     }
 
     /**
-     * @return list<array{method: string, path: string, headers: array<string, string>, body: mixed}>
+     * @return list<array{method: string, path: string, headers: array<string, string>, body: mixed, bodyText: string}>
      */
     public function requestsReceived(): array
     {
@@ -106,6 +106,7 @@ final class ScriptedSdkServer
                 'path' => $request['path'],
                 'headers' => $headers,
                 'body' => $request['body'] ?? null,
+                'bodyText' => is_string($request['bodyText'] ?? null) ? $request['bodyText'] : '',
             ];
         }
 

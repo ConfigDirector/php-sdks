@@ -618,10 +618,27 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
         $client->getValue('new-checkout', false);
         $client->getAllConfigs();
+        $client->track('checkout-completed', new Context(id: 'user-42'), value: 49.9, details: ['plan' => 'pro']);
         $client->dispose();
 
         self::assertSame([], TemporaryFolder::entriesOf($this->folder));
         self::assertSame([], $this->server->requestsReceived());
+    }
+
+    public function testAnOfflineClientTracksNothingAndLogsNothingForAnEventItWouldLeaveOut(): void
+    {
+        $logger = new RecordingLogger();
+        $client = ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['max-items' => 20]),
+            logger: $logger,
+        );
+        $client->initialize();
+
+        $client->track('');
+        $client->track('checkout-completed', new Context(id: 'acme', kind: 'Tenant'), value: INF, details: ['pro']);
+
+        self::assertSame([], $logger->contextsLoggedAt(LogLevel::WARNING));
+        self::assertSame([], $logger->contextsLoggedAt(LogLevel::ERROR));
     }
 
     public function testAnOfflineClientLogsAContextWithAnInvalidKindOnEveryRead(): void
