@@ -11,6 +11,7 @@ use ConfigDirector\Internal\LocalStore\PollingPause;
 use ConfigDirector\Internal\LocalStore\RefreshLock;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
 use ConfigDirector\Internal\LocalStore\UnfilledStore;
+use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Internal\Time\Clock;
 use Psr\Log\LoggerInterface;
 
@@ -19,8 +20,6 @@ final class PollingTransport
     private const int ONE_HOUR_MILLISECONDS = 3_600_000;
 
     private const int MILLISECONDS_BETWEEN_LOOKS_AT_THE_STORE = 1_000;
-
-    private readonly int $createdAtMonotonicMilliseconds;
 
     private ?int $pollDueAtMonotonicMilliseconds = null;
 
@@ -37,14 +36,12 @@ final class PollingTransport
         private readonly PollingEndpoint $endpoint,
         private readonly PollingInterval $pollingInterval,
         private readonly int $timeoutMilliseconds,
-        private readonly int $flushIntervalMilliseconds,
+        private readonly ClientLifetime $clientLifetime,
         private readonly Clock $clock,
         private readonly LoggerInterface $logger,
         private readonly \Closure $reportUnrecoverableError,
         private readonly \Closure $reportPayloadReceivedByAPoll,
-    ) {
-        $this->createdAtMonotonicMilliseconds = $clock->monotonicMilliseconds();
-    }
+    ) {}
 
     public function storedPayloadForInitialization(): StoredPayload|UndeliveredPayload
     {
@@ -103,11 +100,11 @@ final class PollingTransport
     public function storedPayloadFoundByAReadInALongRunningProcess(): ?StoredPayload
     {
         $nowMonotonicMilliseconds = $this->clock->monotonicMilliseconds();
-        $ageMilliseconds = $nowMonotonicMilliseconds - $this->createdAtMonotonicMilliseconds;
         $hasLookedAtTheStoreRecently = $this->lookedAtTheStoreAtMonotonicMilliseconds !== null
             && $nowMonotonicMilliseconds - $this->lookedAtTheStoreAtMonotonicMilliseconds
                 < self::MILLISECONDS_BETWEEN_LOOKS_AT_THE_STORE;
-        if ($this->isClosed || $ageMilliseconds <= $this->flushIntervalMilliseconds || $hasLookedAtTheStoreRecently) {
+        $isInALongRunningProcess = $this->clientLifetime->showsALongRunningProcess();
+        if ($this->isClosed || !$isInALongRunningProcess || $hasLookedAtTheStoreRecently) {
             return null;
         }
 

@@ -8,7 +8,11 @@ use Psr\Log\LoggerInterface;
 
 final class LocalStore
 {
+    private const int MILLISECONDS_TO_WAIT_FOR_THE_TELEMETRY_LOCK = 250;
+
     private bool $hasLoggedAnUnreadablePayloadFile = false;
+
+    private bool $hasWarnedThatTelemetryWasNotKept = false;
 
     private function __construct(
         private readonly ?string $usableFolder,
@@ -66,6 +70,46 @@ final class LocalStore
     }
 
     /**
+     * @template TOutcome
+     *
+     * @param \Closure(TelemetryLock): TOutcome $work
+     *
+     * @return TOutcome|null
+     */
+    public function whileHoldingTheTelemetryLock(\Closure $work): mixed
+    {
+        $telemetryLock = $this->usableFolder === null
+            ? null
+            : TelemetryLock::acquiredWithin(
+                self::MILLISECONDS_TO_WAIT_FOR_THE_TELEMETRY_LOCK,
+                $this->usableFolder,
+                $this->warnOnceThatTelemetryWasNotKeptIn(...),
+            );
+        if ($telemetryLock === null) {
+            return null;
+        }
+
+        try {
+            return $work($telemetryLock);
+        } finally {
+            $telemetryLock->release();
+        }
+    }
+
+    private function warnOnceThatTelemetryWasNotKeptIn(string $file): void
+    {
+        if ($this->hasWarnedThatTelemetryWasNotKept) {
+            return;
+        }
+
+        $this->hasWarnedThatTelemetryWasNotKept = true;
+        $this->logger->warning(
+            '[LocalStore] {file} could not be written or locked, so the telemetry of this request was not kept.',
+            ['file' => $file],
+        );
+    }
+
+    /**
      * @param \Closure(int $remainingMilliseconds, RefreshLock $refreshLock): ?StoredPayload $fetchFreshPayload
      */
     public function storedPayloadFilledWithin(
@@ -84,8 +128,8 @@ final class LocalStore
         $refreshLock = RefreshLock::acquiredWithin($timeoutMilliseconds, $this->usableFolder, $this->logger);
         if (!$refreshLock instanceof RefreshLock) {
             return $this->storedPayload() ?? match ($refreshLock) {
-                UnacquiredRefreshLock::HeldPastTheTimeout => UnfilledStore::RefreshLockHeldPastTheTimeout,
-                UnacquiredRefreshLock::LockFileUnusable => UnfilledStore::UnusableAsItsErrorLineSays,
+                UnacquiredFileLock::HeldPastTheTimeout => UnfilledStore::RefreshLockHeldPastTheTimeout,
+                UnacquiredFileLock::LockFileUnusable => UnfilledStore::UnusableAsItsErrorLineSays,
             };
         }
 

@@ -18,6 +18,7 @@ use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\ScriptedSdkServer;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 final class ClientOfflineTest extends TestCase
 {
@@ -621,6 +622,24 @@ final class ClientOfflineTest extends TestCase
 
         self::assertSame([], TemporaryFolder::entriesOf($this->folder));
         self::assertSame([], $this->server->requestsReceived());
+    }
+
+    public function testAnOfflineClientLogsAContextWithAnInvalidKindOnEveryRead(): void
+    {
+        $logger = new RecordingLogger();
+        $client = ConfigDirector::createClient(
+            connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['max-items' => 20]),
+            logger: $logger,
+        );
+        $client->initialize();
+
+        $client->getValue('max-items', 0, new Context(id: 'device-1', kind: 'Device'));
+        $client->getValue('max-items', 0, new Context(id: 'device-2', kind: 'Device'));
+
+        self::assertSame(
+            [['kindSample' => 'Device'], ['kindSample' => 'Device']],
+            $logger->contextsLoggedAt(LogLevel::ERROR),
+        );
     }
 
     public function testInitializeFiresConfigsUpdatedNamingEveryKeyThenTheWatchesThenClientReady(): void

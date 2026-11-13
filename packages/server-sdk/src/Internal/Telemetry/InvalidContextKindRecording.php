@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ConfigDirector\Internal\Client;
+namespace ConfigDirector\Internal\Telemetry;
 
 enum InvalidContextKindRecording
 {

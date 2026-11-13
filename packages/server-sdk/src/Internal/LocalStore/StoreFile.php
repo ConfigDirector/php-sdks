@@ -45,6 +45,11 @@ final readonly class StoreFile
             && self::attemptedAgainOnWindows(fn(): bool => rename($this->temporaryPath, $this->path));
     }
 
+    public function remove(): void
+    {
+        self::attemptedAgainOnWindows(fn(): bool => !file_exists($this->path) || unlink($this->path));
+    }
+
     private function writeTemporaryFile(string $contents): bool
     {
         return SilencedWarnings::during(function () use ($contents): bool {

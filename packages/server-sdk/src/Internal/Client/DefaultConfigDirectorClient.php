@@ -16,6 +16,9 @@ use ConfigDirector\Internal\Evaluation\ConfigEvaluator;
 use ConfigDirector\Internal\Evaluation\EvaluationContext;
 use ConfigDirector\Internal\Evaluation\ServedBy;
 use ConfigDirector\Internal\Evaluation\ServedValue;
+use ConfigDirector\Internal\Telemetry\ClientTelemetry;
+use ConfigDirector\Internal\Telemetry\InvalidContextKindRecording;
+use ConfigDirector\Internal\Telemetry\InvalidContextSubmissions;
 use ConfigDirector\Internal\Value\InCodeDefaultValue;
 use ConfigDirector\Internal\Value\TypedValue;
 use ConfigDirector\Metadata;
@@ -34,8 +37,6 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
 
     private readonly ConfigEvaluator $evaluator;
 
-    private readonly InvalidContextKinds $invalidContextKinds;
-
     private readonly Watches $watches;
 
     public function __construct(
@@ -44,9 +45,9 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         private readonly int $timeoutMilliseconds,
         private readonly LoggerInterface $logger,
         private readonly EventHandlers $eventHandlers,
+        private readonly ClientTelemetry $telemetry,
     ) {
         $this->evaluator = new ConfigEvaluator();
-        $this->invalidContextKinds = new InvalidContextKinds();
         $this->watches = new Watches();
         ClientsDisposedAtShutdown::add($this);
     }
@@ -192,6 +193,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         $this->disposed = true;
         if ($isFirstDisposal) {
             $this->connection->close();
+            $this->telemetry->close();
         }
 
         $this->payload = null;
@@ -210,6 +212,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     ): ConfigEvaluation {
         $evaluation = $this->evaluationOf($configKey, $inCodeDefaultValue, $context);
         $this->eventHandlers->deliverConfigEvaluated($evaluation);
+        $this->telemetry->storeAndSendWhatIsDueInALongRunningProcess();
 
         return $evaluation;
     }
@@ -241,9 +244,12 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
                 ['configKey' => $configKey, 'value' => $inCodeDefaultValue->value],
             );
 
-            return $inCodeDefaultValueBecauseOf(
+            $evaluation = $inCodeDefaultValueBecauseOf(
                 $this->payload === null ? EvaluationReason::ClientNotReady : EvaluationReason::ConfigStateMissing,
             );
+            $this->telemetry->recordEvaluation($evaluation, $inCodeDefaultValue, null);
+
+            return $evaluation;
         }
 
         $served = $this->valueServedTo($admittedContext, $definition, $this->payload);
@@ -263,6 +269,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
                 },
                 $admittedContext,
             );
+        $this->telemetry->recordEvaluation($evaluation, $inCodeDefaultValue, $state);
         $this->logger->debug(
             "[ConfigDirectorClient] Evaluated '{configKey}' to '{value}'",
             ['configKey' => $configKey, 'value' => $evaluation->value],
@@ -339,7 +346,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         }
 
         $kindSample = ContextKind::sampleOf($context->kind);
-        match ($this->invalidContextKinds->record($kindSample)) {
+        match ($this->telemetry->recordInvalidContextKind($kindSample)) {
             InvalidContextKindRecording::NewKindSample => $this->logger->error(
                 "[ConfigDirectorClient] Ignored a context with the invalid kind '{kindSample}' and evaluated as if "
                 . 'no context was supplied. A context kind has 1 to 64 characters, using only lowercase letters, '
@@ -350,7 +357,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
                 '[ConfigDirectorClient] Ignored a context with another invalid kind and evaluated as if no context '
                 . 'was supplied. {sampleLimit} different invalid kinds were logged recently, so further invalid '
                 . 'kinds are not logged individually.',
-                ['sampleLimit' => InvalidContextKinds::DISTINCT_KIND_SAMPLE_LIMIT],
+                ['sampleLimit' => InvalidContextSubmissions::DISTINCT_KIND_SAMPLE_LIMIT],
             ),
             InvalidContextKindRecording::KnownKindSample, InvalidContextKindRecording::BeyondSampleLimit => null,
         };

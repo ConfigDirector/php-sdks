@@ -13,6 +13,7 @@ use ConfigDirector\Internal\LocalStore\StoredPayload;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
+use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
@@ -1358,7 +1359,7 @@ final class PollingTransportTest extends TestCase
             new PollingEndpoint($server->url, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
             PollingInterval::ofConfiguredSeconds(60),
             3_000,
-            30_000,
+            new ClientLifetime($this->clock, 30_000),
             $this->clock,
             $this->logger,
             static function (): void {},
@@ -1703,7 +1704,7 @@ final class PollingTransportTest extends TestCase
             ),
             PollingInterval::ofConfiguredSeconds($configuredIntervalSeconds),
             $timeoutMilliseconds,
-            $flushIntervalMilliseconds,
+            new ClientLifetime($this->clock, $flushIntervalMilliseconds),
             $this->clock,
             $this->logger,
             function (ConfigDirectorConnectionException $error): void {

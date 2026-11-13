@@ -15,11 +15,16 @@ use ConfigDirector\Internal\Connection\InMemoryConnection;
 use ConfigDirector\Internal\Connection\LocalStoreConnection;
 use ConfigDirector\Internal\Connection\OfflineConnection;
 use ConfigDirector\Internal\Identity\SdkIdentity;
-use ConfigDirector\Internal\LocalStore\LocalStore;
+use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
 use ConfigDirector\Internal\Logging\ErrorLogLogger;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
+use ConfigDirector\Internal\Telemetry\ClientTelemetry;
+use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
+use ConfigDirector\Internal\Telemetry\LocalStoreTelemetry;
+use ConfigDirector\Internal\Telemetry\TelemetryEndpoint;
+use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Internal\Time\SystemClock;
 use ConfigDirector\Metadata;
 use ConfigDirector\TelemetryOptions;
@@ -51,9 +56,12 @@ final class ClientFactory
         $logger ??= self::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
         self::rejectUnusableTelemetry($telemetry);
         $eventHandlers = new EventHandlers($logger);
-        $connection = match ($connectionOptions->mode) {
-            ConnectionMode::Offline => self::offlineConnectionServingTheValuesIn($connectionOptions),
-            ConnectionMode::Polling => self::connectionReadingTheLocalStore(
+        [$connection, $clientTelemetry] = match ($connectionOptions->mode) {
+            ConnectionMode::Offline => [
+                self::offlineConnectionServingTheValuesIn($connectionOptions),
+                new DiscardedTelemetry(),
+            ],
+            ConnectionMode::Polling => self::connectionAndTelemetryOfTheLocalStore(
                 $sdkIdentity,
                 self::serverSdkKeyOfAUsableConnection($serverSdkKey, $connectionOptions),
                 $metadata,
@@ -71,6 +79,7 @@ final class ClientFactory
             $connectionOptions->timeout,
             $logger,
             $eventHandlers,
+            $clientTelemetry,
         );
     }
 
@@ -89,7 +98,14 @@ final class ClientFactory
             $logger,
             $eventHandlers->deliverConnectionError(...),
         );
-        $client = new DefaultConfigDirectorClient($connection, new Metadata(), $timeout, $logger, $eventHandlers);
+        $client = new DefaultConfigDirectorClient(
+            $connection,
+            new Metadata(),
+            $timeout,
+            $logger,
+            $eventHandlers,
+            new DiscardedTelemetry(),
+        );
         $connection->deliverPayloadsTo($client->takeIn(...));
 
         return new TestClient($client, $connection);
@@ -108,7 +124,10 @@ final class ClientFactory
             : OfflineConnection::servingTheValuesOfTheFile($connectionOptions->file);
     }
 
-    private static function connectionReadingTheLocalStore(
+    /**
+     * @return array{Connection, ClientTelemetry}
+     */
+    private static function connectionAndTelemetryOfTheLocalStore(
         SdkIdentity $sdkIdentity,
         string $serverSdkKey,
         Metadata $metadata,
@@ -116,7 +135,7 @@ final class ClientFactory
         TelemetryOptions $telemetry,
         LoggerInterface $logger,
         EventHandlers $eventHandlers,
-    ): Connection {
+    ): array {
         $pollingInterval = PollingInterval::ofConfiguredSeconds($connectionOptions->pollingInterval);
         if ($pollingInterval->isRaisedToTheMinimum) {
             $logger->warning(
@@ -129,22 +148,37 @@ final class ClientFactory
             );
         }
 
-        return new LocalStoreConnection(
-            static fn(\Closure $reportPayloadReceivedByAPoll): PollingTransport => new PollingTransport(
-                LocalStore::ofServerSdkKey($serverSdkKey, $connectionOptions->storagePath, $logger),
-                new PollingEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
-                $pollingInterval,
-                $connectionOptions->timeout,
-                $telemetry->flushInterval,
-                new SystemClock(),
+        $clock = new SystemClock();
+        $clientLifetime = new ClientLifetime($clock, $telemetry->flushInterval);
+        $localStore = new LocalStoreOpenedOnFirstUse($serverSdkKey, $connectionOptions->storagePath, $logger);
+
+        return [
+            new LocalStoreConnection(
+                static fn(\Closure $reportPayloadReceivedByAPoll): PollingTransport => new PollingTransport(
+                    $localStore->store(),
+                    new PollingEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
+                    $pollingInterval,
+                    $connectionOptions->timeout,
+                    $clientLifetime,
+                    $clock,
+                    $logger,
+                    static function (ConfigDirectorConnectionException $error) use ($eventHandlers): void {
+                        $eventHandlers->deliverConnectionError($error);
+                    },
+                    $reportPayloadReceivedByAPoll,
+                ),
                 $logger,
-                static function (ConfigDirectorConnectionException $error) use ($eventHandlers): void {
-                    $eventHandlers->deliverConnectionError($error);
-                },
-                $reportPayloadReceivedByAPoll,
             ),
-            $logger,
-        );
+            new LocalStoreTelemetry(
+                $localStore,
+                new TelemetryEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
+                $telemetry->eventQueueLimit,
+                $telemetry->flushInterval,
+                $clientLifetime,
+                $clock,
+                $logger,
+            ),
+        ];
     }
 
     private static function registerTheHooksIn(

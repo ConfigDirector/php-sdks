@@ -16,6 +16,8 @@ use ConfigDirector\Internal\LocalStore\StoredPayload;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
+use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
+use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\ScriptedSdkServer;
@@ -482,7 +484,7 @@ final class ClientInALongRunningProcessTest extends TestCase
             new PollingEndpoint($this->server->url, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
             PollingInterval::ofConfiguredSeconds(60),
             3_000,
-            self::FLUSH_INTERVAL_MILLISECONDS,
+            new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),
             $this->clock,
             $logger,
             static function (): void {},
@@ -494,6 +496,7 @@ final class ClientInALongRunningProcessTest extends TestCase
             3_000,
             $logger,
             new EventHandlers($logger),
+            new DiscardedTelemetry(),
         );
         $client->initialize();
 

@@ -12,6 +12,7 @@ use ConfigDirector\Internal\LocalStore\StoredPayload;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
+use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\SettableClock;
@@ -91,7 +92,7 @@ final class LocalStoreConnectionTest extends TestCase
                 ),
                 PollingInterval::ofConfiguredSeconds(60),
                 3_000,
-                30_000,
+                new ClientLifetime($this->clock, 30_000),
                 $this->clock,
                 $logger,
                 static function (): void {},

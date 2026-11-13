@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\LocalStore;
 
-enum UnacquiredRefreshLock
+enum UnacquiredFileLock
 {
     case HeldPastTheTimeout;
     case LockFileUnusable;

@@ -12,6 +12,8 @@ use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
+use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
+use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\SettableClock;
 use Psr\Log\AbstractLogger;
@@ -38,13 +40,14 @@ $logger = new class extends AbstractLogger {
     }
 };
 $eventHandlers = new EventHandlers($logger);
+$clock = new SettableClock((int) $nowEpochMilliseconds);
 $transport = new PollingTransport(
     LocalStore::ofServerSdkKey('server-sdk-key', $storagePath, $logger),
     new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
     PollingInterval::ofConfiguredSeconds(60),
     3_000,
-    30_000,
-    new SettableClock((int) $nowEpochMilliseconds),
+    new ClientLifetime($clock, 30_000),
+    $clock,
     $logger,
     static function (ConfigDirectorConnectionException $error) use ($eventHandlers): void {
         $eventHandlers->deliverConnectionError($error);
@@ -57,6 +60,7 @@ $client = new DefaultConfigDirectorClient(
     3_000,
     $logger,
     $eventHandlers,
+    new DiscardedTelemetry(),
 );
 $client->on('connectionError', static function (ConnectionErrorEvent $event): void {
     echo 'connection-error ', $event->error instanceof ConfigDirectorConnectionException ? $event->error->status : '', "\n";

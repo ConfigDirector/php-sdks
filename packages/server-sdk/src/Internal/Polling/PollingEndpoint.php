@@ -26,15 +26,7 @@ final readonly class PollingEndpoint
         private SdkIdentity $sdkIdentity,
     ) {
         $this->url = rtrim($baseUrl, '/') . '/server/polling/v1';
-        $this->metaContext = array_filter(
-            [
-                'sdkName' => $sdkIdentity->sdkName,
-                'sdkVersion' => $sdkIdentity->sdkVersion,
-                'appName' => $metadata->appName,
-                'appVersion' => $metadata->appVersion,
-            ],
-            static fn(?string $value): bool => $value !== null,
-        );
+        $this->metaContext = $sdkIdentity->metaContextOfAnApplicationWith($metadata);
     }
 
     public function answerToAPoll(

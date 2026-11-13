@@ -40,7 +40,9 @@ interface ConfigDirectorClient
     public function isReady(): bool;
 
     /**
-     * Evaluates a config and returns its value for the given context.
+     * Evaluates a config and returns its value for the given context. The evaluation is reported
+     * to ConfigDirector with the host's next telemetry report, together with the context when it
+     * has an `id` and is not anonymous.
      *
      * @param string $configKey The config key to evaluate.
      * @param mixed $defaultValue The in-code default value, returned when no value from
@@ -204,6 +206,11 @@ interface ConfigDirectorClient
      * default value, and every handler, hook and watch is removed. It is safe to call more than
      * once. You do not have to call it: the SDK disposes of the client when the script ends, after
      * your own shutdown functions have run, or as soon as nothing refers to the client any longer.
+     *
+     * Disposing adds what the client evaluated to the telemetry kept in the local store. When the
+     * host's telemetry report is due, this call sends it and waits up to 5 seconds for the
+     * answer, so under PHP-FPM call `fastcgi_finish_request()` first when the response should
+     * not wait for it.
      */
     public function dispose(): void;
 }

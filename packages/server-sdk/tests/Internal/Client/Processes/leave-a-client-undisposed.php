@@ -6,6 +6,7 @@ use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
 use ConfigDirector\Internal\Client\EventHandlers;
 use ConfigDirector\Internal\Connection\Connection;
 use ConfigDirector\Internal\Connection\ServerSdkPayload;
+use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
 use ConfigDirector\Metadata;
 use Psr\Log\NullLogger;
 
@@ -41,6 +42,7 @@ $client = new DefaultConfigDirectorClient(
     250,
     new NullLogger(),
     new EventHandlers(new NullLogger()),
+    new DiscardedTelemetry(),
 );
 $client->initialize();
 register_shutdown_function(static function () use ($client): void {

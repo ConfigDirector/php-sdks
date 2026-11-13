@@ -364,7 +364,7 @@ final class TestClientTest extends TestCase
         $testClient->client->getValue('new-checkout', false);
     }
 
-    public function testAContextWithAnInvalidKindIsLoggedOnceForEachKind(): void
+    public function testAContextWithAnInvalidKindIsLoggedOnEveryRead(): void
     {
         $logger = new RecordingLogger();
         $testClient = ConfigDirectorTesting::createTestClient(values: ['max-items' => 20], logger: $logger);
@@ -373,7 +373,10 @@ final class TestClientTest extends TestCase
         $testClient->client->getValue('max-items', 0, new Context(id: 'device-1', kind: 'Device'));
         $testClient->client->getValue('max-items', 0, new Context(id: 'device-2', kind: 'Device'));
 
-        self::assertSame([['kindSample' => 'Device']], $logger->contextsLoggedAt('error'));
+        self::assertSame(
+            [['kindSample' => 'Device'], ['kindSample' => 'Device']],
+            $logger->contextsLoggedAt('error'),
+        );
     }
 
     public function testCreateTestClientRejectsATimeoutOfZero(): void

@@ -16,6 +16,7 @@ use ConfigDirector\Internal\Connection\Connection;
 use ConfigDirector\Internal\Connection\ServerSdkPayload;
 use ConfigDirector\Internal\Connection\UndeliveredPayload;
 use ConfigDirector\Internal\Evaluation\TargetingRules;
+use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
 use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\CloseCountingConnection;
 use ConfigDirector\Tests\Support\RecordingLogger;
@@ -36,6 +37,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             new EventHandlers(new RecordingLogger()),
+            new DiscardedTelemetry(),
         );
         $client->on('configsUpdated', function (ConfigsUpdatedEvent $update) use (&$updates): void {
             $updates[] = $update;
@@ -65,6 +67,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             new EventHandlers(new RecordingLogger()),
+            new DiscardedTelemetry(),
         );
         $client->watch('integer-config', 'fallback', function (string $value) use (&$values): void {
             $values[] = $value;
@@ -102,6 +105,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             new EventHandlers(new RecordingLogger()),
+            new DiscardedTelemetry(),
         );
         $client->initialize();
         $client->dispose();
@@ -120,6 +124,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             new EventHandlers(new RecordingLogger()),
+            new DiscardedTelemetry(),
         );
 
         $client->dispose();
@@ -136,6 +141,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             new EventHandlers(new RecordingLogger()),
+            new DiscardedTelemetry(),
         );
         $client->dispose();
 
@@ -153,6 +159,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             new EventHandlers(new RecordingLogger()),
+            new DiscardedTelemetry(),
         );
 
         unset($client);
@@ -172,6 +179,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             $eventHandlers,
+            new DiscardedTelemetry(),
         );
         $eventsReceived = [];
         $client->on('connectionError', function (ConnectionErrorEvent $event) use (&$eventsReceived): void {
@@ -194,6 +202,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             250,
             new RecordingLogger(),
             $eventHandlers,
+            new DiscardedTelemetry(),
         );
         $client->initialize();
         $valuesRead = [];

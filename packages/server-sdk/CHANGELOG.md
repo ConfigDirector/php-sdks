@@ -104,10 +104,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   evaluated for. A context whose `kind` is not 1 to 64 characters of lowercase letters, digits, `-`
   and `_` is ignored whole: the config is evaluated as if no context was given, the evaluation's
   `context` is `null`, and an error is logged once for each invalid kind. After 20 different
-  invalid kinds a client logs one more error and then no longer logs them.
+  invalid kinds a client logs one more error and then no longer logs them. A client that has lived
+  longer than `telemetry.flushInterval` logs them again each time it has added its telemetry to
+  the local store, and an offline client and a test client log an invalid kind on every read.
 - `getAllConfigs(context:, configKeys:)` returns a `ConfigState` for every config, or for the listed
   config keys, keyed by config key. It is empty until the client is ready. A `ConfigState` has
   `id`, `key`, `type`, `value` (the served text), `valueId`, `variation`, `ruleId` and `shareId`.
+- Each `getValue`, `evaluate` and watch delivery is reported to ConfigDirector as an evaluation:
+  the config key, the value returned, why it was returned and, for a context with an `id` that is
+  not anonymous, the context's kind and `id`. The dashboard shows this activity, and experiments
+  count their exposures from it. A read that returns the in-code default value is reported with
+  its reason, a read made before `initialize()` included. `getAllConfigs` and reads after
+  `dispose()` are not reported. A value longer than 500 characters, and every JSON value, is
+  reported as a value ID and not as its text.
+- A context with an `id` that is not anonymous is sent to ConfigDirector with its kind, name and
+  traits, and appears in the dashboard. An anonymous context, or one without an `id`, is never
+  sent, and its evaluations name no context. A context with an invalid kind is counted under the
+  first 128 characters of that kind, and nothing else of it is sent.
+- A host sends its telemetry once per `telemetry.flushInterval`, however many requests it serves.
+  When a client is disposed of it adds what it evaluated to the local store, without a request to
+  ConfigDirector. The first request to end at least a flush interval after the host's last
+  report, or after its first client was created when it has sent none, sends what every process
+  stored as one report, after it has asked for values when that is due too. It waits up to 5
+  seconds for the answer, so under PHP-FPM the end of the response waits as well unless the
+  application has called `fastcgi_finish_request()`. A client that was never initialized and read
+  nothing creates no local store and sends nothing.
+- A client that has lived longer than `telemetry.flushInterval`, as in a queue worker, adds what
+  it evaluated to the local store once per flush interval, during the read that finds it due, and
+  sends the host's report in that read when it is due, waiting up to 5 seconds for the answer.
+  Disposing of such a client sends what the local store holds at once.
+- `telemetry.eventQueueLimit` limits what one report holds, and what one client holds until it is
+  disposed of: 70% of it, rounded up, for evaluations, where reads of one config that return the
+  same result for the same context are one entry with a count, and 30%, rounded down, for
+  contexts. The oldest entries over the limit are left out, and ConfigDirector receives a count
+  of them. The telemetry kept in the local store is limited to 8 MiB, and what no longer fits is
+  counted as dropped too.
+- When ConfigDirector refuses a telemetry report with a 4xx status other than 413 and 429, no
+  process of the host collects or sends telemetry for one hour, and the process that sent the
+  report logs one warning. No `connectionError` handler is called. A report answered with any
+  other status that is not 2xx, or not answered within 5 seconds, is dropped with one warning and
+  never sent again, and the next report counts what it held as dropped. When the telemetry file of
+  the local store cannot be written or locked, each client logs one warning that names the file.
+  A client whose local store cannot be used reports nothing.
 - `dispose()` can be called more than once. Afterwards the client is not ready, every read returns
   its in-code default value with the reason `client-not-ready`, `getAllConfigs` is empty, and every
   event handler, hook and watch is removed.

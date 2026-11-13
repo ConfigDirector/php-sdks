@@ -81,13 +81,21 @@ received. In `PollingRequestsTest` each request is a PHP process as well, starte
 whose certificate is not trusted is sent no poll needs the openssl extension and is skipped on
 Windows.
 
+The telemetry tests of the server SDK send their reports to the same scripted SDK server. In
+`ClientTelemetryTest` one client reads and is disposed of, as a request would be, and a second client
+with a flush interval of one millisecond stands for the later request that sends the report. In
+`ClientTelemetryAcrossRequestsTest` each request is a PHP process, started from
+`packages/server-sdk/tests/Processes/serve-a-request-that-reads-a-config.php`, and
+`ClientTelemetryOverTimeTest` moves a settable clock instead of waiting. One test waits the five
+seconds a report is given for its answer.
+
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.
 
 ## How the provider identifies itself
 
 The SDK reports an SDK name and version in the `User-Agent` header and in every request it sends
-for values, and will report them in telemetry: `php-server-sdk` and `ConfigDirector\Version::CURRENT`.
+for values and in every telemetry report: `php-server-sdk` and `ConfigDirector\Version::CURRENT`.
 A package built on the SDK, such as the provider, reports its own name and version,
 `php-openfeature-server-provider` and `ConfigDirector\OpenFeature\Version::CURRENT`, without the SDK
 accepting an arbitrary identity from its caller: the SDK keeps a closed list of the packages allowed
