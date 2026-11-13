@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Tests;
 
+use ConfigDirector\ClientHooks;
 use ConfigDirector\ConfigDirector;
 use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConnectionOptions;
@@ -95,6 +96,38 @@ final class DefaultLoggerTest extends TestCase
         $this->expectOutputRegex('/^[^\r\n]*Device {2}forged line[^\r\n]*\R$/');
 
         $client->getValue('integer-config', 10, new Context(id: 'device-1', kind: "Device\r\nforged line"));
+    }
+
+    public function testAnErrorEndsWithTheClassAndMessageOfItsException(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            hooks: new ClientHooks(configEvaluated: static function (): void {
+                throw new \RuntimeException('The handler failed');
+            }),
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex(
+            '/^\[ConfigDirector:php-server-sdk\] error: [^\r\n]*configEvaluated[^\r\n]* RuntimeException: The handler failed\R$/',
+        );
+
+        $client->getValue('integer-config', 10);
+    }
+
+    public function testALineBreakInAnExceptionMessageStaysOnOneLine(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            hooks: new ClientHooks(configEvaluated: static function (): void {
+                throw new \RuntimeException("The handler failed\r\nforged line");
+            }),
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex('/^[^\r\n]*The handler failed {2}forged line\R$/');
+
+        $client->getValue('integer-config', 10);
     }
 
     public function testALogLevelThatIsNotAPsrLevelIsRejected(): void

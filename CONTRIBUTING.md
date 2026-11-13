@@ -29,16 +29,16 @@ application does.
 
 ## Working on the packages
 
-You need PHP 8.3 or later, Composer 2, and Docker for `make test-floor`. Every PHP release we run
+You need PHP 8.3 or later, Composer 2, and Docker for `make check-floor`. Every PHP release we run
 ourselves must have the fixes for CVE-2026-109618 and CVE-2026-109619: 8.3.36, 8.4.27, 8.5.12 or a
 later release on the same line. On macOS, `brew install php composer` installs a patched PHP 8.5.
 
 ```sh
-make install    # composer install, every package
-make hooks      # pre-push hook that runs make check-all
-make check      # lint and test: the fast loop
-make test-floor # the suites on PHP 8.3, in Docker
-make check-all  # everything CI runs
+make install     # composer install, every package
+make hooks       # pre-push hook that runs make check-all
+make check       # lint and test: the fast loop
+make check-floor # lint and the suites on PHP 8.3, in Docker
+make check-all   # everything CI runs
 ```
 
 Targets that run per package take `PACKAGES`, so `make test PACKAGES=server-sdk` runs one suite.
@@ -53,12 +53,15 @@ matches its `composer.json`. `make audit` runs `composer audit` against each loc
 
 `make test-lowest` runs the suites against the lowest version of every dependency that each
 `composer.json` allows, installed in a throwaway directory, so the committed lock files stay as they
-are. `make test-floor` runs `make verify-php test` in the official `php:8.3-cli` image, pulled again on
-every run so that it is the newest 8.3 release, on a copy of this working tree without any `vendor/`.
+are. `make check-floor` runs `make verify-php lint test` in the official `php:8.3-cli` image, pulled
+again on every run so that it is the newest 8.3 release, on a copy of this working tree without any
+`vendor/`. PHP-CS-Fixer is meant to run on the lowest PHP a project supports and warns on a newer one,
+so `make check-all` lints there and not on your own PHP; `make check` and `make format` still run it on
+your PHP and print that warning.
 
 CI runs the suites on PHP 8.3, 8.4 and 8.5 on Ubuntu, on PHP 8.5 on macOS, and on PHP 8.3 and 8.5
 on Windows, and `make test-lowest` on PHP 8.3 and 8.5. Locally, `make check-all` covers your own PHP and, through
-`make test-floor`, PHP 8.3.
+`make check-floor`, PHP 8.3.
 
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.

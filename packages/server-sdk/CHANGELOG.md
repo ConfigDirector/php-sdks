@@ -71,7 +71,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   that callback, or every watch on the key when no callback is given, and `unwatchAll()` removes
   every watch.
 - A handler or watch that throws is logged at error level, with the exception under the PSR-3
-  `exception` key, and ignored: the other handlers still run and the read returns its value.
+  `exception` key, and ignored: the other handlers still run and the read returns its value. The
+  default logger ends the line with the exception's class and message.
 - `logger` takes a PSR-3 logger. Without one the SDK writes warnings and errors through
   `error_log`, and `logLevel` takes a PSR-3 level, such as `Psr\Log\LogLevel::DEBUG`, to write
   more or less. A `logLevel` that is not a PSR-3 level throws `ConfigDirectorValidationException`.

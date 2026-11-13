@@ -45,10 +45,18 @@ final class ErrorLogLogger extends AbstractLogger
         }
 
         error_log(sprintf(
-            '[ConfigDirector:php-server-sdk] %s: %s',
+            '[ConfigDirector:php-server-sdk] %s: %s%s',
             $level,
             self::withPlaceholdersFilled((string) $message, $context),
+            self::exceptionTextOf($context['exception'] ?? null),
         ));
+    }
+
+    private static function exceptionTextOf(mixed $exception): string
+    {
+        return $exception instanceof \Throwable
+            ? sprintf(' %s: %s', $exception::class, self::onOneLine($exception->getMessage()))
+            : '';
     }
 
     /**

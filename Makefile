@@ -1,10 +1,11 @@
-.PHONY: install hooks verify-php verify-lock format lint test test-lowest test-floor audit check check-all clean
+.PHONY: install hooks verify-php verify-lock format lint test test-lowest check-floor audit check check-all clean
 
 # Every package this repository publishes, each in a directory under packages/ named after its Composer
 # package. Narrow a target to one of them with, for example, `make test PACKAGES=server-sdk`.
 PACKAGES := server-sdk openfeature-server-provider
 
-# The official image of the oldest PHP line the packages support. `test-floor` runs the suites in it.
+# The official image of the oldest PHP line the packages support. `check-floor` runs the lint and the suites
+# in it.
 FLOOR_IMAGE := php:8.3-cli
 FLOOR_TAG := configdirector-php-sdks-floor
 
@@ -65,16 +66,18 @@ test-lowest:
 		status=$$?; rm -rf "$$lowest"; [ "$$status" -eq 0 ] || exit "$$status"; \
 	done
 
-# The suites on the oldest supported PHP line, in its official image, from a copy of this working tree
-# without any vendor/, so nothing installed for the local PHP leaks in and nothing is written back.
-# --pull fetches the image's latest patch release, which verify-php then checks.
-test-floor:
-	@printf '\n\033[1m==> test-floor %s\033[0m\n' "$(FLOOR_IMAGE)"
+# The lint and the suites on the oldest supported PHP line, in its official image, from a copy of this
+# working tree without any vendor/, so nothing installed for the local PHP leaks in and nothing is
+# written back. The lint runs here rather than on the local PHP because PHP-CS-Fixer is meant to run on
+# the lowest PHP a project supports, as it does in CI. --pull fetches the image's latest patch release,
+# which verify-php then checks.
+check-floor:
+	@printf '\n\033[1m==> check-floor %s\033[0m\n' "$(FLOOR_IMAGE)"
 	docker build --pull --quiet --build-arg PHP_IMAGE=$(FLOOR_IMAGE) --tag $(FLOOR_TAG) - < tools/floor.Dockerfile
 	docker run --rm --volume "$(CURDIR)":/source:ro --env COMPOSER_ROOT_VERSION=dev-main $(FLOOR_TAG) sh -c '\
 		mkdir /work \
 		&& tar -C /source --exclude=./.git --exclude=vendor --exclude=.phpunit.cache -cf - . | tar -C /work -xf - \
-		&& make -C /work verify-php test'
+		&& make -C /work verify-php lint test'
 
 audit:
 	@for package in $(PACKAGES); do \
@@ -86,7 +89,7 @@ audit:
 check: lint test
 
 # Everything CI runs. The pre-push hook calls this.
-check-all: verify-php verify-lock lint test test-lowest test-floor audit
+check-all: verify-php verify-lock test test-lowest check-floor audit
 	@printf '\n\033[1m✓ all checks passed\033[0m\n'
 
 clean:
