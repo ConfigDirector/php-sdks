@@ -66,6 +66,13 @@ CI runs the suites on PHP 8.3, 8.4 and 8.5 on Ubuntu, on PHP 8.5 on macOS, and o
 on Windows, and `make test-lowest` and `make samples-local` on PHP 8.3 and 8.5. Locally,
 `make check-all` covers your own PHP and, through `make check-floor`, PHP 8.3.
 
+The local store tests of the server SDK start real PHP processes that read and write one store, from
+the scripts in `packages/server-sdk/tests/Internal/LocalStore/Processes/`. The tests on file modes,
+symbolic links, folder ownership and a writer killed while writing are skipped on Windows. The test
+that a folder owned by another system user is refused runs only as the root user, which is what
+`make check-floor` runs as, and the test that a folder without write permission is refused runs only
+as any other user.
+
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.
 

@@ -21,8 +21,10 @@ final readonly class ConnectionOptions
      * @param string|null $file The path of a JSON file holding the values to serve in offline mode.
      * @param array<string, mixed>|null $values The values to serve in offline mode, keyed by config
      *     key.
-     * @param string|null $storagePath The folder where the SDK keeps the values it received, to
-     *     use in place of a folder in the system temp directory.
+     * @param string|null $storagePath The folder in which the SDK keeps the values it received, in
+     *     a folder of its own for each server SDK key. Defaults to a folder in the system temp
+     *     directory that belongs to the system user running PHP. On Linux and macOS, only that
+     *     user can read what the SDK writes there.
      */
     public function __construct(
         public ConnectionMode $mode = ConnectionMode::Polling,
