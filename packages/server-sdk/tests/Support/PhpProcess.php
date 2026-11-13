@@ -19,15 +19,20 @@ final class PhpProcess
 
     /**
      * @param list<string> $arguments
-     * @param list<string> $phpOptions
+     * @param array<string, string> $phpSettings
      * @param list<string> $commandPrefix
      */
     public static function running(
         string $script,
         array $arguments,
-        array $phpOptions = [],
+        array $phpSettings = [],
         array $commandPrefix = [],
     ): self {
+        $phpOptions = [];
+        foreach ($phpSettings as $setting => $value) {
+            array_push($phpOptions, '-d', "{$setting}=\"{$value}\"");
+        }
+
         $process = proc_open(
             [...$commandPrefix, PHP_BINARY, ...$phpOptions, $script, self::autoloadFile(), ...$arguments],
             [1 => ['pipe', 'w'], 2 => STDERR],

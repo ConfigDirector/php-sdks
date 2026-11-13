@@ -200,7 +200,7 @@ final class LocalStoreFolderTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/print-stored-payload.php',
             [$this->storagePath, 'server-sdk-key'],
-            ['-d', 'open_basedir=' . implode(PATH_SEPARATOR, $foldersPhpMayOpen), '-d', 'display_errors=1'],
+            ['open_basedir' => implode(PATH_SEPARATOR, $foldersPhpMayOpen), 'display_errors' => '1'],
         )->finished()->output;
 
         self::assertSame(
@@ -217,7 +217,7 @@ final class LocalStoreFolderTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
             ['', 'server-sdk-key', 'default-location', '10'],
-            ['-d', 'sys_temp_dir=' . $this->storagePath],
+            ['sys_temp_dir' => $this->storagePath],
         )->finished()->output;
 
         $folderOfTheSystemUser = $this->storagePath . '/configdirector-' . fileowner($this->storagePath);
@@ -234,7 +234,7 @@ final class LocalStoreFolderTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
             ['', 'server-sdk-key', 'default-location', '10'],
-            ['-d', 'sys_temp_dir=' . $this->storagePath],
+            ['sys_temp_dir' => $this->storagePath],
         )->finished()->output;
 
         self::assertSame('stored', $output);
@@ -249,7 +249,7 @@ final class LocalStoreFolderTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
             ['', 'server-sdk-key', 'default-location', '10'],
-            ['-d', 'sys_temp_dir=' . $this->storagePath, '-d', 'disable_functions=posix_geteuid'],
+            ['sys_temp_dir' => $this->storagePath, 'disable_functions' => 'posix_geteuid'],
         )->finished()->output;
 
         self::assertSame('stored', $output);
@@ -269,12 +269,7 @@ final class LocalStoreFolderTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/print-stored-payload.php',
             ['', 'server-sdk-key'],
-            [
-                '-d',
-                'sys_temp_dir=' . $this->storagePathInsideAFile(),
-                '-d',
-                'disable_functions=posix_geteuid',
-            ],
+            ['sys_temp_dir' => $this->storagePathInsideAFile(), 'disable_functions' => 'posix_geteuid'],
         )->finished()->output;
 
         self::assertSame(
@@ -295,7 +290,7 @@ final class LocalStoreFolderTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/print-stored-payload.php',
             ['', 'server-sdk-key'],
-            ['-d', 'sys_temp_dir=' . $systemTempDirectory],
+            ['sys_temp_dir' => $systemTempDirectory],
         )->finished()->output;
 
         self::assertSame(

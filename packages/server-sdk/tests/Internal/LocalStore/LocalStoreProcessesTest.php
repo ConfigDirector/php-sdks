@@ -224,7 +224,7 @@ final class LocalStoreProcessesTest extends TestCase
         $output = PhpProcess::running(
             __DIR__ . '/Processes/store-payload.php',
             [$this->storagePath, 'server-sdk-key', 'too-large', (string) (32 * 1024 * 1024)],
-            ['-d', 'memory_limit=512M'],
+            ['memory_limit' => '512M'],
         )->finished()->output;
 
         self::assertSame('not-stored', $output);
