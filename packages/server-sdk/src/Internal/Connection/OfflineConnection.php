@@ -6,9 +6,7 @@ namespace ConfigDirector\Internal\Connection;
 
 use ConfigDirector\ConfigDirectorInitializationException;
 use ConfigDirector\ConfigDirectorValidationException;
-use ConfigDirector\Internal\Evaluation\TargetingRules;
 use ConfigDirector\Internal\LocalStore\SilencedWarnings;
-use ConfigDirector\Internal\Value\EncodedNativeValue;
 use ConfigDirector\Internal\Value\UnservableValue;
 
 final readonly class OfflineConnection implements Connection
@@ -74,22 +72,7 @@ final readonly class OfflineConnection implements Connection
      */
     private static function payloadServing(array $values): ServerSdkPayload
     {
-        $configs = [];
-        foreach ($values as $configKey => $value) {
-            if (trim((string) $configKey) === '') {
-                throw new UnservableValue('Invalid config key. The key of a value cannot be empty.');
-            }
-
-            $encodedValue = EncodedNativeValue::of($value, (string) $configKey);
-            $configs[(string) $configKey] = new ConfigDefinition(
-                "offline:{$configKey}",
-                (string) $configKey,
-                $encodedValue->configType,
-                new TargetingRules($encodedValue->servedText, null, null, []),
-            );
-        }
-
-        return new ServerSdkPayload($configs, []);
+        return new ServerSdkPayload(ConfigDefinition::servingEachValueToEveryContext($values, 'offline:'), []);
     }
 
     /**

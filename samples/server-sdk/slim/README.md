@@ -116,21 +116,33 @@ The SDK also supports watching configs and subscribing to the client's events; s
 it creates the Slim app with `SampleApplication::create()`, builds each request with Slim's PSR-7
 factory and passes it to `$app->handle()`, so no web server runs.
 
-```php
-$app = SampleApplication::create($settings);
+The tests read configs through a **test client** from `ConfigDirector\Testing`: the SDK's real
+client over an in-memory connection that the test controls. It needs no server SDK key, never
+connects to ConfigDirector and creates no local store. Each test puts the test client's client in
+the application's container, in place of the one the application would create:
 
-$request = (new ServerRequestFactory())->createServerRequest('GET', '/configs?id=user-123&plan=pro');
-$response = $app->handle($request);
+```php
+$testClient = ConfigDirectorTesting::createTestClient(values: ['integer-config' => 42]);
+$testClient->client->initialize();
+
+$app = SampleApplication::create(ConfigDirectorSettings::fromEnvironment([]));
+$app->getContainer()->set(ConfigDirectorClient::class, $testClient->client);
+
+$response = $app->handle((new ServerRequestFactory())->createServerRequest('GET', '/configs'));
+
+$testClient->setValue('integer-config', 7);
 ```
 
-The SDK has no test client yet, so the tests give the application the settings of a small local
-server, [`tests/Support/serve-the-sample-configs.php`](tests/Support/serve-the-sample-configs.php),
-that answers the SDK with five configs whose values differ from the in-code default values, and a
-storage path of their own. Nothing reaches ConfigDirector.
+The first response serves 42 for `integer-config`, and a request handled after `setValue()` gets 7.
 
-To see the context each config was evaluated for, and why it got its value, a test takes the
-request's client from the container and registers a `configEvaluated` handler before handling the
-request.
+`failInitialization()` is how the tests cover a client that gets no values: the application serves
+the in-code default values it passes in.
+
+To see the context each config was evaluated for, and why it got its value, a test registers a
+`configEvaluated` handler on the test client's client before handling the request.
+
+The test of the debug log level uses the client the application creates, in offline mode, which
+never connects either.
 
 [`tests/ConfigDirectorSettingsTest.php`](tests/ConfigDirectorSettingsTest.php) covers how the
 environment becomes the client's settings.

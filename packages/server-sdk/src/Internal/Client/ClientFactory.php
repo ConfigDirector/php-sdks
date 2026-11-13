@@ -11,6 +11,7 @@ use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConnectionMode;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\Internal\Connection\Connection;
+use ConfigDirector\Internal\Connection\InMemoryConnection;
 use ConfigDirector\Internal\Connection\LocalStoreConnection;
 use ConfigDirector\Internal\Connection\OfflineConnection;
 use ConfigDirector\Internal\Identity\SdkIdentity;
@@ -22,6 +23,7 @@ use ConfigDirector\Internal\Polling\PollingTransport;
 use ConfigDirector\Internal\Time\SystemClock;
 use ConfigDirector\Metadata;
 use ConfigDirector\TelemetryOptions;
+use ConfigDirector\Testing\TestClient;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 
@@ -70,6 +72,27 @@ final class ClientFactory
             $logger,
             $eventHandlers,
         );
+    }
+
+    /**
+     * @param array<array-key, mixed>|null $values
+     */
+    public static function testClientServing(?array $values, ?int $timeout, ?LoggerInterface $logger): TestClient
+    {
+        $logger ??= self::errorLogLoggerWritingFrom(LogLevel::WARNING);
+        $timeout ??= (new ConnectionOptions())->timeout;
+        self::rejectUnusableTimeout($timeout);
+        $eventHandlers = new EventHandlers($logger);
+        $connection = InMemoryConnection::servingTheValues(
+            $values ?? [],
+            $timeout,
+            $logger,
+            $eventHandlers->deliverConnectionError(...),
+        );
+        $client = new DefaultConfigDirectorClient($connection, new Metadata(), $timeout, $logger, $eventHandlers);
+        $connection->deliverPayloadsTo($client->takeIn(...));
+
+        return new TestClient($client, $connection);
     }
 
     private static function offlineConnectionServingTheValuesIn(ConnectionOptions $connectionOptions): Connection
@@ -152,12 +175,11 @@ final class ClientFactory
         );
     }
 
-    private static function rejectUnusableTimeout(ConnectionOptions $connectionOptions): void
+    private static function rejectUnusableTimeout(int $timeoutMilliseconds): void
     {
-        if ($connectionOptions->timeout <= 0) {
+        if ($timeoutMilliseconds <= 0) {
             throw new ConfigDirectorValidationException(
-                "Invalid timeout '{$connectionOptions->timeout}'. The timeout must be a positive number of "
-                . 'milliseconds.',
+                "Invalid timeout '{$timeoutMilliseconds}'. The timeout must be a positive number of milliseconds.",
             );
         }
     }
@@ -179,7 +201,7 @@ final class ClientFactory
         }
         self::rejectUnusableBaseUrl($connectionOptions->url);
         self::rejectUnusableStoragePath($connectionOptions->storagePath);
-        self::rejectUnusableTimeout($connectionOptions);
+        self::rejectUnusableTimeout($connectionOptions->timeout);
 
         return $serverSdkKey;
     }

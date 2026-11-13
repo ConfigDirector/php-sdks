@@ -7,6 +7,8 @@ namespace ConfigDirector\Internal\Connection;
 use ConfigDirector\ConfigState;
 use ConfigDirector\Internal\Evaluation\ServedValue;
 use ConfigDirector\Internal\Evaluation\TargetingRules;
+use ConfigDirector\Internal\Value\EncodedNativeValue;
+use ConfigDirector\Internal\Value\UnservableValue;
 use ConfigDirector\Variation;
 
 final readonly class ConfigDefinition
@@ -21,6 +23,34 @@ final readonly class ConfigDefinition
         public TargetingRules $targetingRules,
         private array $variations = [],
     ) {}
+
+    /**
+     * @param array<array-key, mixed> $values
+     *
+     * @return array<string, self>
+     *
+     * @throws UnservableValue
+     */
+    public static function servingEachValueToEveryContext(array $values, string $idPrefix): array
+    {
+        $definitions = [];
+        foreach ($values as $configKey => $value) {
+            $configKey = (string) $configKey;
+            if (trim($configKey) === '') {
+                throw new UnservableValue('Invalid config key. The key of a value cannot be empty.');
+            }
+
+            $encodedValue = EncodedNativeValue::of($value, $configKey);
+            $definitions[$configKey] = new self(
+                "{$idPrefix}{$configKey}",
+                $configKey,
+                $encodedValue->configType,
+                new TargetingRules($encodedValue->servedText, null, null, []),
+            );
+        }
+
+        return $definitions;
+    }
 
     public function stateServing(ServedValue $served): ConfigState
     {

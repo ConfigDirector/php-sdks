@@ -27,6 +27,11 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
 
     private bool $disposed = false;
 
+    private bool $isTakingInAPayload = false;
+
+    /** @var list<ServerSdkPayload> */
+    private array $payloadsArrivedDuringATakeIn = [];
+
     private readonly ConfigEvaluator $evaluator;
 
     private readonly InvalidContextKinds $invalidContextKinds;
@@ -190,6 +195,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         }
 
         $this->payload = null;
+        $this->payloadsArrivedDuringATakeIn = [];
         $this->eventHandlers->removeAll();
         $this->watches->removeAll();
     }
@@ -273,7 +279,26 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         }
     }
 
-    private function takeIn(ServerSdkPayload $payload): void
+    public function takeIn(ServerSdkPayload $payload): void
+    {
+        if ($this->isTakingInAPayload) {
+            $this->payloadsArrivedDuringATakeIn[] = $payload;
+
+            return;
+        }
+
+        $this->isTakingInAPayload = true;
+        try {
+            $this->replaceTheHeldPayloadWith($payload);
+            while ($this->payloadsArrivedDuringATakeIn !== []) {
+                $this->replaceTheHeldPayloadWith(array_shift($this->payloadsArrivedDuringATakeIn));
+            }
+        } finally {
+            $this->isTakingInAPayload = false;
+        }
+    }
+
+    private function replaceTheHeldPayloadWith(ServerSdkPayload $payload): void
     {
         $update = $payload->configsUpdatedSince($this->payload);
         $becomesReady = $this->payload === null;

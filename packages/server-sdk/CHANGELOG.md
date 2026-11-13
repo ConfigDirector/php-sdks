@@ -136,9 +136,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `clientReady`, `configsUpdated`, `configEvaluated` and `connectionError`, registered before any
   event can fire. An entry of a list that is not callable is ignored and a warning is logged.
 - The client receives values during `initialize()`, and after that only when it has lived longer
-  than `telemetry.flushInterval` and a read finds changed values in the local store. Each time, it
-  calls the `configsUpdated` handlers, then the watches on the keys the event names, then the
-  `clientReady` handlers when the client has just become ready.
+  than `telemetry.flushInterval` and a read finds changed values in the local store, or when the
+  test client it belongs to changes the values it serves. Each time, it calls the `configsUpdated`
+  handlers, then the watches on the keys the event names, then the `clientReady` handlers when the
+  client has just become ready. It takes in one set of values at a time: values that arrive while
+  its handlers and watches run, such as a change a handler makes, are taken in once those have run.
 - `watch($configKey, $defaultValue, $callback, $context)` calls the callback with the config's
   value each time the client receives values in which the config is new or changed, whether or
   not the value changed for the watch's context, and with the in-code default value when the
@@ -156,3 +158,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `ConfigDirectorException` is the base class of every exception of the SDK, including
   `ConfigDirectorValidationException`, `ConfigDirectorInitializationException` and
   `ConfigDirectorConnectionException`.
+- `ConfigDirector\Testing\ConfigDirectorTesting::createTestClient(values:, timeout:, logger:)`
+  returns a `TestClient`: the SDK's real client, as `$testClient->client`, over an in-memory
+  connection that the test controls. It needs no server SDK key, never connects to
+  ConfigDirector, creates no local store and sends nothing. `values` takes the values
+  `connection.values` takes, `timeout` defaults to 3,000 milliseconds and `logger` to the SDK's
+  `error_log` logger. It throws `ConfigDirectorValidationException` for a blank config key, a value
+  the SDK cannot serve, or a `timeout` of zero or less.
+- A test client's client starts not initialized, and `initialize()` serves the values at once.
+  Every context receives the same value, as a match (`found-match`) without a `valueId` or a
+  `variation`, and `getAllConfigs` gives each config the id `test-config:<key>`.
+- `setValue($key, $value)`, `removeValue($key)` and `replaceValues($values)` change the values a
+  test client serves. While its client is connected, from an `initialize()` that serves the values
+  or a `completeInitialization()` until its `dispose()` or an `initialize()` that is held or
+  fails, the change reaches the client before the call returns: the `configsUpdated` handlers and
+  the watches of the configs whose value changed run inside the call. A change made from inside a
+  handler or a watch reaches the client after the change being handled, and one made while the
+  client is not connected reaches it once it is connected again. `setValue` and `replaceValues`
+  throw `ConfigDirectorValidationException` for a blank config key or a value the SDK cannot
+  serve, and change nothing then. `replaceValues` also cancels a hold or a failure that no
+  `initialize()` has used yet.
+- `holdInitialization()` makes the next `initialize()` wait for the timeout, log the warning a
+  production client logs then, and return without values. `completeInitialization()` then
+  delivers the values and makes the client ready, calling the `clientReady` handlers once; called
+  before `initialize()`, it cancels the hold. `failInitialization()` makes the next `initialize()`,
+  or a held one that has returned, fail at once as a refused server SDK key does: an error is
+  logged and the `connectionError` handlers receive a `ConfigDirectorConnectionException` with the
+  status 401. In both cases a client that was not ready stays not ready, and one that was ready
+  keeps serving the values it had, until the next `initialize()` serves the values.

@@ -162,11 +162,14 @@ interface ConfigDirectorClient
      *   a request with a 4xx status other than 429, for example because the server SDK key is
      *   wrong. The SDK then does not ask ConfigDirector again for one hour. It is called in the
      *   process that sent the request: during {@see initialize()}, when the client is disposed
-     *   of, or during a read of a long-lived client.
+     *   of, or during a read of a long-lived client. The client of a test client also has it called
+     *   by {@see \ConfigDirector\Testing\TestClient::failInitialization()}.
      *
      * The client receives values during {@see initialize()}. A long-lived client, one that has
      * lived longer than the telemetry flush interval as in a queue worker, also looks at the local
-     * store during a read, at most once a second, and receives the values that changed there.
+     * store during a read, at most once a second, and receives the values that changed there. The
+     * client of a {@see \ConfigDirector\Testing\TestClient} also receives values each time its test
+     * client changes them.
      * Each time, it calls the `configsUpdated` handlers first, then the watches on the keys the
      * event names, then the `clientReady` handlers when the client has just become ready. Inside
      * these handlers and watches the client is ready and reads return the values received. A
