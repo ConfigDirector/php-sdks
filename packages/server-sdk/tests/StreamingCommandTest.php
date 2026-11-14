@@ -188,7 +188,7 @@ final class StreamingCommandTest extends TestCase
     private function commandWith(array $settings, array $phpSettings = []): PhpProcess
     {
         return PhpProcess::running(
-            dirname(__DIR__) . '/bin/configdirector-stream',
+            __DIR__ . '/Processes/run-the-streaming-command.php',
             [],
             phpSettings: $phpSettings,
             environment: [

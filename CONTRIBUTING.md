@@ -94,8 +94,10 @@ The streaming process tests of the server SDK stream from a scripted stream serv
 open, answers heartbeats, telemetry reports and polls meanwhile, records what it received, and sends
 or closes the stream when the test tells it to. In `StreamingProcessTest` and `StreamingCommandTest`
 the streaming process is a PHP process of its own, started from
-`packages/server-sdk/tests/Processes/run-a-streaming-process.php` or from
-`packages/server-sdk/bin/configdirector-stream`, and each request is a PHP process as well.
+`packages/server-sdk/tests/Processes/run-a-streaming-process.php`, or, for the command, from
+`packages/server-sdk/tests/Processes/run-the-streaming-command.php`, which hands
+`bin/configdirector-stream` the autoloader of the tests as Composer's `vendor/bin` proxy hands it the
+application's, and each request is a PHP process as well.
 `StreamingProcessOverTimeTest` moves a settable clock instead of waiting, and calls the streaming
 process one step at a time. There, a stream shows a sign of life through an event that carries no
 payload, because the error it logs tells the test that the bytes arrived. The tests that stop a
