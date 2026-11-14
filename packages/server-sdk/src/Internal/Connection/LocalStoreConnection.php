@@ -31,7 +31,7 @@ final class LocalStoreConnection implements Connection
     public function payloadForInitialization(): ServerSdkPayload|UndeliveredPayload
     {
         $this->transport ??= ($this->openTransport)(function (StoredPayload $payloadReceived): void {
-            $this->payloadReadFrom($payloadReceived, LogLevel::WARNING);
+            $this->payloadReadFrom($payloadReceived, LogLevel::WARNING)->readEveryDefinition($this->logger);
         });
         $storedPayload = $this->transport->storedPayloadForInitialization();
 
@@ -72,8 +72,7 @@ final class LocalStoreConnection implements Connection
             return $this->payloadLastRead;
         }
 
-        $payload = ServerSdkPayloadParser::payloadIn($storedPayload->payload);
-        $payload->logUnreadableDefinitions($this->logger, $logLevelOfUnreadableDefinitions);
+        $payload = ServerSdkPayloadParser::payloadIn($storedPayload->payload, $logLevelOfUnreadableDefinitions);
         $this->stampOfTheWriteLastRead = $storedPayload->stampOfItsWrite();
         $this->payloadLastRead = $payload;
 

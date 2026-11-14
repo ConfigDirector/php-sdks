@@ -275,10 +275,10 @@ final class ClientInALongRunningProcessTest extends TestCase
         $this->anotherProcessStores($payloadWithAConfigWithoutATarget);
         $client = $this->initializedClient();
         $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS + 1;
-        $client->isReady();
+        $client->getValue('page-size', 10);
 
         $this->clock->epochMilliseconds += 1_000;
-        $client->isReady();
+        $client->getValue('page-size', 10);
 
         self::assertCount(1, array_column($this->logger->contextsLoggedAt(LogLevel::DEBUG), 'cause'));
     }

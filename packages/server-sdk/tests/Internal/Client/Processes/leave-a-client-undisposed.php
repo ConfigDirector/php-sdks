@@ -21,7 +21,7 @@ $connection = new class implements Connection {
     #[Override]
     public function payloadForInitialization(): ServerSdkPayload
     {
-        return new ServerSdkPayload([], []);
+        return ServerSdkPayload::ofDefinitions([], []);
     }
 
     #[Override]

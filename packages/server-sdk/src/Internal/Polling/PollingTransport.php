@@ -95,7 +95,7 @@ final class PollingTransport
             UnfilledStore::UnusableAsItsErrorLineSays => UndeliveredPayload::ReasonLoggedAsAnError,
             UnfilledStore::NothingFetched => match ($pollWasUnsentBecause) {
                 UnsentPoll::NoTimeLeft => UndeliveredPayload::WaitReachedTheTimeout,
-                UnsentPoll::NotDue => UndeliveredPayload::FailedPollOnRecord,
+                UnsentPoll::NotDue => $this->reasonNoValuesAreDeliveredWhileThePollIsNotDue(),
                 UnsentPoll::PollingPauseNotRecorded => UndeliveredPayload::ReasonLoggedAsAnError,
                 null => UndeliveredPayload::ReasonLoggedAsAnError,
             },
@@ -164,6 +164,18 @@ final class PollingTransport
         $this->reportThePayloadTheServerSent($pollAttempt, $payloadStored);
 
         return $payloadStored;
+    }
+
+    private function reasonNoValuesAreDeliveredWhileThePollIsNotDue(): UndeliveredPayload
+    {
+        $theLastPollFailed = $this->store->pollingPause($this->endpoint->url)->pollFailed ?? true;
+        if ($theLastPollFailed) {
+            return UndeliveredPayload::FailedPollOnRecord;
+        }
+
+        return $this->store->holdsAPayloadFile()
+            ? UndeliveredPayload::ReasonLoggedAsAnError
+            : UndeliveredPayload::LastPollLeftNoValues;
     }
 
     private function reportThePayloadTheServerSent(PollAttempt $pollAttempt, ?StoredPayload $payloadStored): void

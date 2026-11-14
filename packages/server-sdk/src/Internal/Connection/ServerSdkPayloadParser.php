@@ -21,32 +21,19 @@ final class ServerSdkPayloadParser
     /**
      * @param array<array-key, mixed> $decodedPayload
      */
-    public static function payloadIn(array $decodedPayload): ServerSdkPayload
+    public static function payloadIn(array $decodedPayload, string $logLevelOfUnreadableDefinitions): ServerSdkPayload
     {
-        $configs = [];
-        $causesByUnreadableConfigKey = [];
-        foreach (self::entriesIn($decodedPayload, 'configs') as $configKey => $wireConfig) {
-            try {
-                $configs[(string) $configKey] = self::configDefinedBy($wireConfig);
-            } catch (UnreadableDefinition $unreadable) {
-                $causesByUnreadableConfigKey[(string) $configKey] = $unreadable->getMessage();
-            }
-        }
-
-        $segments = [];
-        $causesByUnreadableSegmentId = [];
-        foreach (self::entriesIn($decodedPayload, 'segments') as $segmentId => $wireSegment) {
-            try {
-                $segments[(string) $segmentId] = self::segmentDefinedBy($wireSegment);
-            } catch (UnreadableDefinition $unreadable) {
-                $causesByUnreadableSegmentId[(string) $segmentId] = $unreadable->getMessage();
-            }
-        }
-
-        return new ServerSdkPayload($configs, $segments, $causesByUnreadableConfigKey, $causesByUnreadableSegmentId);
+        return ServerSdkPayload::readingEachWireDefinitionOnItsFirstUse(
+            self::entriesIn($decodedPayload, 'configs'),
+            self::entriesIn($decodedPayload, 'segments'),
+            $logLevelOfUnreadableDefinitions,
+        );
     }
 
-    private static function configDefinedBy(mixed $wireConfig): ConfigDefinition
+    /**
+     * @throws UnreadableDefinition
+     */
+    public static function configDefinedBy(mixed $wireConfig): ConfigDefinition
     {
         $wireTarget = is_array($wireConfig) ? $wireConfig['target'] ?? null : null;
         if (!is_array($wireConfig) || !is_array($wireTarget)) {
@@ -177,7 +164,10 @@ final class ServerSdkPayloadParser
         );
     }
 
-    private static function segmentDefinedBy(mixed $wireSegment): Segment
+    /**
+     * @throws UnreadableDefinition
+     */
+    public static function segmentDefinedBy(mixed $wireSegment): Segment
     {
         $wireGroups = is_array($wireSegment) ? $wireSegment['groups'] ?? null : null;
         if (!is_array($wireGroups)) {

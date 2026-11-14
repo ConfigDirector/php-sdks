@@ -294,6 +294,59 @@ final class ClientEventsTest extends SampleConfigsTestCase
         );
     }
 
+    public function testAConfigEvaluatedHandlerThatReadsAConfigIsNotCalledForItsOwnRead(): void
+    {
+        $keysTheHandlerWasCalledFor = [];
+        $valuesTheHandlerRead = [];
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
+        $client->initialize();
+        $client->on(
+            'configEvaluated',
+            static function (ConfigEvaluatedEvent $event) use (
+                $client,
+                &$keysTheHandlerWasCalledFor,
+                &$valuesTheHandlerRead,
+            ): void {
+                $keysTheHandlerWasCalledFor[] = $event->evaluation->key;
+                $valuesTheHandlerRead[] = $client->getValue('day-of-the-week-config', 'Friday');
+            },
+        );
+
+        $value = $client->getValue('integer-config', 10);
+
+        self::assertSame(42, $value);
+        self::assertSame(['integer-config'], $keysTheHandlerWasCalledFor);
+        self::assertSame(['Monday'], $valuesTheHandlerRead);
+    }
+
+    public function testAReadAfterAHandlerWhoseOwnReadWasRejectedStillCallsTheHandler(): void
+    {
+        $keysTheHandlerWasCalledFor = [];
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: new RecordingLogger(),
+        );
+        $client->initialize();
+        $client->on(
+            'configEvaluated',
+            static function (ConfigEvaluatedEvent $event) use ($client, &$keysTheHandlerWasCalledFor): void {
+                $keysTheHandlerWasCalledFor[] = $event->evaluation->key;
+                // @phpstan-ignore argument.type
+                $client->getValue('day-of-the-week-config', null);
+            },
+        );
+
+        $client->getValue('integer-config', 10);
+        $client->getValue('integer-config', 10);
+
+        self::assertSame(['integer-config', 'integer-config'], $keysTheHandlerWasCalledFor);
+    }
+
     public function testConfigEvaluatedCarriesTheEvaluationOfARead(): void
     {
         $evaluations = [];

@@ -27,6 +27,14 @@ final readonly class StoreFile
         return file_exists($this->path);
     }
 
+    public function sizeInBytes(): int
+    {
+        clearstatcache(true, $this->path);
+        $sizeInBytes = SilencedWarnings::during(fn(): int|false => filesize($this->path));
+
+        return $sizeInBytes === false ? 0 : $sizeInBytes;
+    }
+
     /**
      * @param int<0, max> $maximumBytes
      */

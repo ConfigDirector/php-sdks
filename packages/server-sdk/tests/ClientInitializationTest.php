@@ -234,6 +234,35 @@ final class ClientInitializationTest extends TestCase
         self::assertCount(1, $loggerOfTheNextRequest->contextsLoggedAt(LogLevel::DEBUG));
     }
 
+    public function testARequestThatFindsThePollOfAProcessThatEndedBeforeItsAnswerDoesNotPoll(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => self::PAYLOAD_OF_ONE_CONFIG, 'delayMilliseconds' => 500],
+        ]);
+        $this->killAProcessDuringItsPollOf($server);
+        $client = $this->clientPolling($server, new RecordingLogger());
+
+        $client->initialize();
+
+        self::assertCount(1, $server->requestsReceived());
+        self::assertFalse($client->isReady());
+    }
+
+    public function testARequestThatFindsThePollOfAProcessThatEndedBeforeItsAnswerLogsOneWarningAndNoError(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => self::PAYLOAD_OF_ONE_CONFIG, 'delayMilliseconds' => 500],
+        ]);
+        $this->killAProcessDuringItsPollOf($server);
+        $logger = new RecordingLogger();
+        $client = $this->clientPolling($server, $logger);
+
+        $client->initialize();
+
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::WARNING));
+        self::assertSame([], $logger->contextsLoggedAt(LogLevel::ERROR));
+    }
+
     public function testAStoragePathThatCannotBeUsedLogsOneErrorNamingTheFolderAndNoWarning(): void
     {
         $server = $this->serverAnswering([['status' => 200, 'body' => self::PAYLOAD_OF_ONE_CONFIG]]);
@@ -322,6 +351,24 @@ final class ClientInitializationTest extends TestCase
         $this->servers[] = $server;
 
         return $server;
+    }
+
+    private function killAProcessDuringItsPollOf(ScriptedSdkServer $server): void
+    {
+        $process = PhpProcess::running(
+            __DIR__ . '/Processes/serve-a-request-that-reads-a-config.php',
+            [$this->storagePath, $server->url, '30000', ''],
+        );
+        $giveUpAt = hrtime(true) + 10_000_000_000;
+        while ($server->requestsReceived() === []) {
+            if (hrtime(true) >= $giveUpAt) {
+                $process->stop();
+                self::fail('The process sent no poll within 10 seconds.');
+            }
+            usleep(1_000);
+        }
+
+        $process->killAtOnce();
     }
 
     private function clientPolling(

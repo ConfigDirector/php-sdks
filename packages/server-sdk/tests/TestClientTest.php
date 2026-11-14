@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Tests;
 
+use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigDirectorException;
 use ConfigDirector\ConfigDirectorValidationException;
@@ -19,6 +20,7 @@ use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 
 final class TestClientTest extends TestCase
@@ -148,6 +150,34 @@ final class TestClientTest extends TestCase
             ],
             $testClient->client->getAllConfigs(),
         );
+    }
+
+    public function testALoggerThatAsksForEveryConfigOfAnInvalidKindOnEachLineReceivesOneLine(): void
+    {
+        $logger = new class extends AbstractLogger {
+            public ?ConfigDirectorClient $clientItReads = null;
+
+            public int $linesReceived = 0;
+
+            /**
+             * @param array<array-key, mixed> $context
+             */
+            #[\Override]
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                $this->linesReceived++;
+                $this->clientItReads?->getAllConfigs(new Context(id: 'device-1', kind: 'Not A Valid Kind'));
+            }
+        };
+        $testClient = ConfigDirectorTesting::createTestClient(values: ['page-size' => 25], logger: $logger);
+        $testClient->client->initialize();
+        $logger->clientItReads = $testClient->client;
+        $logger->linesReceived = 0;
+
+        $states = $testClient->client->getAllConfigs(new Context(id: 'device-1', kind: 'Not A Valid Kind'));
+
+        self::assertSame(['page-size'], array_keys($states));
+        self::assertSame(1, $logger->linesReceived);
     }
 
     public function testAKeyWithoutATestValueReturnsTheInCodeDefaultValueWithConfigStateMissing(): void

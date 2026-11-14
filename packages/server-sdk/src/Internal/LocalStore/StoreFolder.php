@@ -12,7 +12,7 @@ final readonly class StoreFolder
 
     private const int FILE_TYPE_OF_A_FOLDER = 0o040000;
 
-    private const int ACCESS_OF_OTHER_USERS_IN_A_MODE = 0o077;
+    private const int WRITE_ACCESS_OF_OTHER_USERS_IN_A_MODE = 0o022;
 
     private function __construct(
         public string $path,
@@ -87,9 +87,8 @@ final readonly class StoreFolder
             return FolderRefusal::OwnedByAnotherUser;
         }
 
-        $isOpenToOtherUsers = ($statusOfTheFolderItself['mode'] & self::ACCESS_OF_OTHER_USERS_IN_A_MODE) !== 0;
-        if ($isOpenToOtherUsers && !chmod($folder, 0o700)) {
-            return FolderRefusal::NotWritable;
+        if (($statusOfTheFolderItself['mode'] & self::WRITE_ACCESS_OF_OTHER_USERS_IN_A_MODE) !== 0) {
+            return FolderRefusal::WritableByOtherUsers;
         }
 
         return is_writable($folder) ? null : FolderRefusal::NotWritable;

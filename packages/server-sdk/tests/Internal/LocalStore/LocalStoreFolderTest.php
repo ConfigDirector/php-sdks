@@ -60,15 +60,41 @@ final class LocalStoreFolderTest extends TestCase
     }
 
     #[RequiresOperatingSystem('Linux|Darwin')]
-    public function testAStoreFolderThatEveryUserCouldWriteToIsMadeReadableByItsOwnerOnly(): void
+    public function testAStoreFolderThatTheGroupOfItsOwnerCanWriteToIsNotRead(): void
     {
-        umask(0);
-        mkdir($this->storeFolder(), 0o777);
-
         self::storeAPayloadIn($this->storagePath);
+        chmod($this->storeFolder(), 0o720);
 
-        clearstatcache();
-        self::assertSame(0o700, fileperms($this->storeFolder()) & 0o777);
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+
+        self::assertNull($store->storedPayload());
+    }
+
+    #[RequiresOperatingSystem('Linux|Darwin')]
+    public function testAStoreFolderThatOtherSystemUsersCanWriteToIsNotReadAndLogsOneErrorNamingTheFolder(): void
+    {
+        self::storeAPayloadIn($this->storagePath);
+        chmod($this->storeFolder(), 0o702);
+        $logger = new RecordingLogger();
+
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger);
+        $storedPayload = $store->storedPayload();
+        $store->storedPayload();
+
+        self::assertNull($storedPayload);
+        self::assertNull($store->refreshLockAcquiredWithin(0));
+        self::assertSame([['folder' => $this->storeFolder()]], $logger->contextsLoggedAt(LogLevel::ERROR));
+    }
+
+    #[RequiresOperatingSystem('Linux|Darwin')]
+    public function testAStoreFolderThatOtherSystemUsersCanOnlyReadIsUsed(): void
+    {
+        self::storeAPayloadIn($this->storagePath);
+        chmod($this->storeFolder(), 0o755);
+
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger());
+
+        self::assertNotNull($store->storedPayload());
     }
 
     #[RequiresOperatingSystem('Linux|Darwin')]

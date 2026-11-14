@@ -8,5 +8,6 @@ enum UndeliveredPayload
 {
     case WaitReachedTheTimeout;
     case FailedPollOnRecord;
+    case LastPollLeftNoValues;
     case ReasonLoggedAsAnError;
 }

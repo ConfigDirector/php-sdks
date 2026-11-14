@@ -14,6 +14,7 @@ use ConfigDirector\Metadata;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\SampleConfigsTestCase;
 use ConfigDirector\Variation;
+use Psr\Log\AbstractLogger;
 
 final class ClientReadsTest extends SampleConfigsTestCase
 {
@@ -151,20 +152,52 @@ final class ClientReadsTest extends SampleConfigsTestCase
     public function testAClientServingOneRequestAfterAnotherServesEachTheValueOfItsOwnContext(): void
     {
         $client = self::readyClient();
-        $proCustomerOfTheFirstRequest = new Context(id: 'user-123', traits: ['plan' => 'pro']);
-        $freeCustomerOfTheSecondRequest = new Context(id: 'user-456', traits: ['plan' => 'free']);
+        $proCustomer = new Context(id: 'user-123', traits: ['plan' => 'pro']);
+        $freeCustomer = new Context(id: 'user-456', traits: ['plan' => 'free']);
 
-        $evaluationOfTheFirstRequest = $client->evaluate('day-of-the-week-config', 'Friday', $proCustomerOfTheFirstRequest);
+        $evaluationOfTheFirstRequest = $client->evaluate('day-of-the-week-config', 'Friday', $proCustomer);
         $evaluationOfARequestWithoutAContext = $client->evaluate('day-of-the-week-config', 'Friday');
-        $evaluationOfTheSecondRequest = $client->evaluate('day-of-the-week-config', 'Friday', $freeCustomerOfTheSecondRequest);
-        $evaluationOfTheFirstCustomerAgain = $client->evaluate('day-of-the-week-config', 'Friday', $proCustomerOfTheFirstRequest);
+        $evaluationOfTheThirdRequest = $client->evaluate('day-of-the-week-config', 'Friday', $freeCustomer);
+        $evaluationOfTheFirstCustomerAgain = $client->evaluate('day-of-the-week-config', 'Friday', $proCustomer);
 
         self::assertSame('Tuesday', $evaluationOfTheFirstRequest->value);
         self::assertSame('Monday', $evaluationOfARequestWithoutAContext->value);
         self::assertNull($evaluationOfARequestWithoutAContext->context);
-        self::assertSame('Monday', $evaluationOfTheSecondRequest->value);
-        self::assertSame($freeCustomerOfTheSecondRequest, $evaluationOfTheSecondRequest->context);
+        self::assertSame('Monday', $evaluationOfTheThirdRequest->value);
+        self::assertSame($freeCustomer, $evaluationOfTheThirdRequest->context);
         self::assertSame('Tuesday', $evaluationOfTheFirstCustomerAgain->value);
+    }
+
+    public function testALoggerThatReadsAConfigForEveryLineReceivesNoLineForItsOwnRead(): void
+    {
+        $logger = new class extends AbstractLogger {
+            public ?ConfigDirectorClient $clientItReads = null;
+
+            public int $linesReceived = 0;
+
+            /**
+             * @param array<array-key, mixed> $context
+             */
+            #[\Override]
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                $this->linesReceived++;
+                $this->clientItReads?->getValue('day-of-the-week-config', 'Friday');
+            }
+        };
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logger: $logger,
+        );
+        $client->initialize();
+        $logger->clientItReads = $client;
+        $logger->linesReceived = 0;
+
+        $value = $client->getValue('integer-config', 10);
+
+        self::assertSame(42, $value);
+        self::assertSame(1, $logger->linesReceived);
     }
 
     public function testARuleOnTheApplicationNameServesItsValueToThatApplication(): void

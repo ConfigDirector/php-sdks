@@ -24,6 +24,7 @@ use ConfigDirector\Internal\Value\InCodeDefaultValue;
 use ConfigDirector\Internal\Value\TypedValue;
 use ConfigDirector\Metadata;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 final class DefaultConfigDirectorClient implements ConfigDirectorClient
 {
@@ -32,6 +33,8 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     private bool $disposed = false;
 
     private bool $isTakingInAPayload = false;
+
+    private bool $isInsideARead = false;
 
     /** @var list<ServerSdkPayload> */
     private array $payloadsArrivedDuringATakeIn = [];
@@ -82,6 +85,11 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
                     '[ConfigDirectorClient] initialize() did not wait for values because a failed poll is on '
                     . 'record. Configs return the in-code default value until values arrive.',
                 ),
+                UndeliveredPayload::LastPollLeftNoValues => $this->logger->warning(
+                    '[ConfigDirectorClient] initialize() did not wait for values because the last poll of this '
+                    . 'host left none, as when its process ends before the answer. The next poll is sent within '
+                    . 'one polling interval. Configs return the in-code default value until values arrive.',
+                ),
                 UndeliveredPayload::ReasonLoggedAsAnError => null,
             };
 
@@ -122,21 +130,24 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     public function getAllConfigs(?Context $context = null, ?array $configKeys = null): array
     {
         $this->takeInThePayloadFoundByThisRead();
-        $admittedContext = $this->admittedContextOrNone($context);
-        if ($this->payload === null) {
-            return [];
-        }
 
-        $states = [];
-        foreach ($this->payload->configs as $definition) {
-            if ($configKeys === null || in_array($definition->key, $configKeys, true)) {
-                $states[$definition->key] = $definition->stateServing(
-                    $this->valueServedTo($admittedContext, $definition, $this->payload),
-                );
+        return $this->whileInsideARead(function (LoggerInterface $logger) use ($context, $configKeys): array {
+            $admittedContext = $this->admittedContextOrNone($context, $logger);
+            if ($this->payload === null) {
+                return [];
             }
-        }
 
-        return $states;
+            $states = [];
+            foreach ($this->payload->configs($logger) as $definition) {
+                if ($configKeys === null || in_array($definition->key, $configKeys, true)) {
+                    $states[$definition->key] = $definition->stateServing(
+                        $this->valueServedTo($admittedContext, $definition, $this->payload, $logger),
+                    );
+                }
+            }
+
+            return $states;
+        });
     }
 
     #[\Override]
@@ -181,11 +192,20 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             return;
         }
 
-        $this->telemetry->recordTrackedEvent(
-            new TrackCall($eventName, $context, $value, $details),
-            $this->admittedContextOrNone(...),
-        );
-        $this->telemetry->storeAndSendWhatIsDueInALongRunningProcess();
+        $this->whileInsideARead(function (LoggerInterface $logger, bool $isMadeInsideAnotherRead) use (
+            $eventName,
+            $context,
+            $value,
+            $details,
+        ): void {
+            $this->telemetry->recordTrackedEvent(
+                new TrackCall($eventName, $context, $value, $details),
+                fn(?Context $contextOfTheEvent): ?Context => $this->admittedContextOrNone($contextOfTheEvent, $logger),
+            );
+            if (!$isMadeInsideAnotherRead) {
+                $this->telemetry->storeAndSendWhatIsDueInALongRunningProcess();
+            }
+        });
     }
 
     #[\Override]
@@ -229,11 +249,37 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         InCodeDefaultValue $inCodeDefaultValue,
         ?Context $context,
     ): ConfigEvaluation {
-        $evaluation = $this->evaluationOf($configKey, $inCodeDefaultValue, $context);
-        $this->eventHandlers->deliverConfigEvaluated($evaluation);
-        $this->telemetry->storeAndSendWhatIsDueInALongRunningProcess();
+        return $this->whileInsideARead(function (LoggerInterface $logger, bool $isMadeInsideAnotherRead) use (
+            $configKey,
+            $inCodeDefaultValue,
+            $context,
+        ): ConfigEvaluation {
+            $evaluation = $this->evaluationOf($configKey, $inCodeDefaultValue, $context, $logger);
+            if (!$isMadeInsideAnotherRead) {
+                $this->eventHandlers->deliverConfigEvaluated($evaluation);
+                $this->telemetry->storeAndSendWhatIsDueInALongRunningProcess();
+            }
 
-        return $evaluation;
+            return $evaluation;
+        });
+    }
+
+    /**
+     * @template TOutcome
+     *
+     * @param \Closure(LoggerInterface $logger, bool $isMadeInsideAnotherRead): TOutcome $read
+     *
+     * @return TOutcome
+     */
+    private function whileInsideARead(\Closure $read): mixed
+    {
+        $isMadeInsideAnotherRead = $this->isInsideARead;
+        $this->isInsideARead = true;
+        try {
+            return $read($isMadeInsideAnotherRead ? new NullLogger() : $this->logger, $isMadeInsideAnotherRead);
+        } finally {
+            $this->isInsideARead = $isMadeInsideAnotherRead;
+        }
     }
 
     /**
@@ -243,8 +289,9 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         string $configKey,
         InCodeDefaultValue $inCodeDefaultValue,
         ?Context $context,
+        LoggerInterface $logger,
     ): ConfigEvaluation {
-        $admittedContext = $this->admittedContextOrNone($context);
+        $admittedContext = $this->admittedContextOrNone($context, $logger);
         $inCodeDefaultValueBecauseOf = static fn(EvaluationReason $reason): ConfigEvaluation => new ConfigEvaluation(
             key: $configKey,
             value: $inCodeDefaultValue->value,
@@ -255,9 +302,9 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             context: $admittedContext,
         );
 
-        $definition = $this->payload->configs[$configKey] ?? null;
+        $definition = $this->payload?->configWithKey($configKey, $logger);
         if ($this->payload === null || $definition === null) {
-            $this->logger->debug(
+            $logger->debug(
                 "[ConfigDirectorClient] No config state found for '{configKey}', "
                 . "returning the in-code default value '{value}'",
                 ['configKey' => $configKey, 'value' => $inCodeDefaultValue->value],
@@ -271,7 +318,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             return $evaluation;
         }
 
-        $servedValue = $this->valueServedTo($admittedContext, $definition, $this->payload);
+        $servedValue = $this->valueServedTo($admittedContext, $definition, $this->payload, $logger);
         $state = $definition->stateServing($servedValue);
         $typedValue = TypedValue::fromServedText($state->value, $state->type, $inCodeDefaultValue->type);
         $evaluation = $typedValue instanceof EvaluationReason
@@ -289,7 +336,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
                 context: $admittedContext,
             );
         $this->telemetry->recordEvaluation($evaluation, $inCodeDefaultValue, $state);
-        $this->logger->debug(
+        $logger->debug(
             "[ConfigDirectorClient] Evaluated '{configKey}' to '{value}'",
             ['configKey' => $configKey, 'value' => $evaluation->value],
         );
@@ -326,15 +373,18 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
 
     private function replaceTheHeldPayloadWith(ServerSdkPayload $payload): void
     {
-        $update = $payload->configsUpdatedSince($this->payload);
-        $becomesReady = $this->payload === null;
+        $heldPayload = $this->payload;
+        $becomesReady = $heldPayload === null;
         $this->payload = $payload;
-        if (!$becomesReady && $update->keys === [] && $update->removedKeys === []) {
-            return;
+        $hasAHandlerOrAWatchToDeliverAnUpdateTo = $this->eventHandlers->hasAHandlerOf(ClientEventName::ConfigsUpdated)
+            || $this->watches->holdAWatch();
+        if ($hasAHandlerOrAWatchToDeliverAnUpdateTo) {
+            $update = $payload->configsUpdatedSince($heldPayload, $this->logger);
+            if ($becomesReady || $update->keys !== [] || $update->removedKeys !== []) {
+                $this->eventHandlers->deliverConfigsUpdated($update);
+                $this->deliverToTheWatchesOn([...$update->keys, ...$update->removedKeys]);
+            }
         }
-
-        $this->eventHandlers->deliverConfigsUpdated($update);
-        $this->deliverToTheWatchesOn([...$update->keys, ...$update->removedKeys]);
         if ($becomesReady) {
             $this->eventHandlers->deliverClientReady();
         }
@@ -358,7 +408,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         }
     }
 
-    private function admittedContextOrNone(?Context $context): ?Context
+    private function admittedContextOrNone(?Context $context, LoggerInterface $logger): ?Context
     {
         if ($context === null || $context->kind === null || ContextKind::isValid($context->kind)) {
             return $context;
@@ -366,13 +416,13 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
 
         $kindSample = ContextKind::sampleOf($context->kind);
         match ($this->telemetry->recordInvalidContextKind($kindSample)) {
-            InvalidContextKindRecording::NewKindSample => $this->logger->error(
+            InvalidContextKindRecording::NewKindSample => $logger->error(
                 "[ConfigDirectorClient] Ignored a context with the invalid kind '{kindSample}' and evaluated as if "
                 . 'no context was supplied. A context kind has 1 to 64 characters, using only lowercase letters, '
                 . "digits, '-' and '_'.",
                 ['kindSample' => $kindSample],
             ),
-            InvalidContextKindRecording::FirstBeyondSampleLimit => $this->logger->error(
+            InvalidContextKindRecording::FirstBeyondSampleLimit => $logger->error(
                 '[ConfigDirectorClient] Ignored a context with another invalid kind and evaluated as if no context '
                 . 'was supplied. {sampleLimit} different invalid kinds were logged recently, so further invalid '
                 . 'kinds are not logged individually.',
@@ -388,6 +438,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
         ?Context $context,
         ConfigDefinition $definition,
         ServerSdkPayload $payload,
+        LoggerInterface $logger,
     ): ServedValue {
         return $this->evaluator->evaluate(
             $definition->id,
@@ -400,7 +451,7 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
                 appName: $this->metadata->appName,
                 appVersion: $this->metadata->appVersion,
             ),
-            $payload->segments,
+            $payload->segments($logger),
         );
     }
 }

@@ -585,12 +585,42 @@ final class ClientServerSdkPayloadTest extends TestCase
         );
 
         $clientOfTheNextRequest->initialize();
+        $clientOfTheNextRequest->getValue('broken-config', 'in-code-default');
 
         self::assertSame([], $loggerOfTheNextRequest->contextsLoggedAt(LogLevel::WARNING));
         self::assertSame(
             ['broken-config'],
-            array_column($loggerOfTheNextRequest->contextsLoggedAt(LogLevel::DEBUG), 'configKey'),
+            array_column(
+                array_filter(
+                    $loggerOfTheNextRequest->contextsLoggedAt(LogLevel::DEBUG),
+                    static fn(array $context): bool => array_key_exists('cause', $context),
+                ),
+                'configKey',
+            ),
         );
+    }
+
+    public function testARequestThatNeverReadsASkippedConfigOfTheLocalStoreLogsNothingAboutIt(): void
+    {
+        $this->clientInitializedWith(self::payloadOf([
+            'broken-config' => [
+                'id' => '9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f',
+                'key' => 'broken-config',
+                'type' => 'string',
+            ],
+        ]));
+        $loggerOfTheNextRequest = new RecordingLogger();
+        $clientOfTheNextRequest = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: $this->servers[0]->url, storagePath: $this->storagePath),
+            logger: $loggerOfTheNextRequest,
+        );
+
+        $clientOfTheNextRequest->initialize();
+        $clientOfTheNextRequest->getValue('another-config', 'in-code-default');
+
+        self::assertSame([], $loggerOfTheNextRequest->contextsLoggedAt(LogLevel::WARNING));
+        self::assertSame([], array_column($loggerOfTheNextRequest->contextsLoggedAt(LogLevel::DEBUG), 'cause'));
     }
 
     public function testASegmentWithoutGroupsIsSkippedSoARuleOnItServesNoOne(): void

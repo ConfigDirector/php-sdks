@@ -257,7 +257,7 @@ final class DefaultConfigDirectorClientTest extends TestCase
             );
         }
 
-        return new ServerSdkPayload($configs, []);
+        return ServerSdkPayload::ofDefinitions($configs, []);
     }
 
     /**

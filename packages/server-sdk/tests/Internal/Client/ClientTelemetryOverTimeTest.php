@@ -506,7 +506,7 @@ final class ClientTelemetryOverTimeTest extends TestCase
         $localStore->store();
 
         return new DefaultConfigDirectorClient(
-            connection: new CloseCountingConnection(new ServerSdkPayload([], []), $whileTheConnectionCloses),
+            connection: new CloseCountingConnection(ServerSdkPayload::ofDefinitions([], []), $whileTheConnectionCloses),
             metadata: new Metadata(),
             timeoutMilliseconds: 3_000,
             logger: $this->logger,

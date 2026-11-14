@@ -58,7 +58,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   logs a warning when the wait reached `connection.timeout`. When its own request to
   ConfigDirector failed, or the local store cannot be used, the error logged for that is the only
   line. After a failed request, the requests that follow do not wait and log one line at debug
-  level, until the host asks ConfigDirector again.
+  level, until the host asks ConfigDirector again. When the last request of a host for values
+  left none, as when its process ended before the answer arrived, the host asks again within one
+  polling interval, and until then each request that finds no values logs a warning.
 - The values in the local store are served for `connection.pollingInterval`. The request that
   finds them older asks ConfigDirector for them again when its client is disposed of, after the
   application's own code, so a host asks once per polling interval however many requests it
@@ -77,18 +79,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   ID is the number of the system user running PHP and only that user can read the folder, and
   inside `<system temp directory>\configdirector` on Windows. Web workers and command-line jobs
   that run as different system users each keep a local store of their own.
-- A local store folder that is a symbolic link, belongs to another system user, or cannot be
-  created or written to is not used: the client never asks ConfigDirector for values, every read
-  returns its in-code default value, and one error that names the folder is logged for each
-  client. A file of the local store that cannot be read counts as an empty local store, with one
-  error for each client. A local store folder that other system users could read or write to is
-  closed to them when a client opens it. A file of the local store that holds a time or a count
-  far outside what the SDK writes, as a damaged or hand-edited file can, counts as one that
-  cannot be read, and such an entry of the stored telemetry is left out of the report.
+- A local store folder that is a symbolic link, belongs to another system user, can be written
+  to by other system users, or cannot be created or written to is not used: the client never
+  asks ConfigDirector for values, every read returns its in-code default value, and one error
+  that names the folder is logged for each client. A file of the local store that cannot be read
+  counts as an empty local store, with one error for each client. A file of the local store that
+  holds a time or a count far outside what the SDK writes, as a damaged or hand-edited file can,
+  counts as one that cannot be read, and such an entry of the stored telemetry is left out of the
+  report.
+- Values that would take more memory to read than PHP's `memory_limit` leaves the process are
+  not read, where reading them would end the request with a fatal error. An answer of
+  ConfigDirector that large counts as a failed request, and values that large in the local store
+  count as an empty local store; each logs an error. Reading values takes several times their
+  size in memory, so under the default limit of 128M this starts at about 8 MiB of values.
 - A config or segment that the SDK cannot read in the values it received is skipped, and every
   other config is served. A read of a skipped config returns its in-code default value with the
   reason `config-state-missing`. The request that received the values logs a warning that names
-  the config or segment, and requests that read them from the local store log it at debug level.
+  the config or segment, and a request that takes the values from the local store logs a config
+  at debug level when it reads that config, and a segment when it first reads any config.
   Fields the SDK does not know are ignored, and a config of a type it does not know is served
   under that type.
 - `getValue($configKey, $defaultValue, $context)` returns a config's value as the type of the
@@ -184,7 +192,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   variations, or when a segment its targeting rules use changed. `configEvaluated` handlers
   receive a
   `ConfigEvaluatedEvent` with the `evaluation` of each `getValue`, `evaluate` and watch, before the
-  read returns; `getAllConfigs` fires none. `connectionError` handlers receive a
+  read returns; `getAllConfigs` fires none. A read, a `getAllConfigs` or a `track` made while
+  another one of the same client is still running, as a `configEvaluated` handler or a logger
+  that reads a config makes, returns its value and is reported, but calls no `configEvaluated`
+  handler and logs nothing. `connectionError` handlers receive a
   `ConnectionErrorEvent` with the `error`, a `ConfigDirectorConnectionException` whose `status` is
   the HTTP status ConfigDirector answered with. It fires when ConfigDirector refuses a request
   with a 4xx status other than 429, in the process that sent the request: during `initialize()`,

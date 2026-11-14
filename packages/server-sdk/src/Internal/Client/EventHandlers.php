@@ -43,6 +43,11 @@ final class EventHandlers
         $this->handlersByEventName = [];
     }
 
+    public function hasAHandlerOf(ClientEventName $eventName): bool
+    {
+        return ($this->handlersByEventName[$eventName->value] ?? []) !== [];
+    }
+
     public function deliverClientReady(): void
     {
         $this->deliver(ClientEventName::ClientReady);

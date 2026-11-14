@@ -48,6 +48,11 @@ final class Watches
         $this->watchesByConfigKey = [];
     }
 
+    public function holdAWatch(): bool
+    {
+        return $this->watchesByConfigKey !== [];
+    }
+
     /**
      * @param list<string> $configKeys
      *

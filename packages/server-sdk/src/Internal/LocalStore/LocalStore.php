@@ -51,15 +51,24 @@ final class LocalStore
         if ($storedPayload instanceof StoredPayload) {
             return $storedPayload;
         }
-        if ($storedPayload === AbsentPayload::FileUnreadable && !$this->hasLoggedAnUnreadablePayloadFile) {
+        $errorMessage = match ($storedPayload) {
+            AbsentPayload::FileMissing => null,
+            AbsentPayload::FileUnreadable => '[LocalStore] The values kept in {file} could not be read, so they '
+                . 'will be fetched again.',
+            AbsentPayload::FileTooLargeForTheMemoryLeft => '[LocalStore] The values kept in {file} need more '
+                . 'memory than the memory_limit of this process leaves, so they are not read.',
+        };
+        if ($errorMessage !== null && !$this->hasLoggedAnUnreadablePayloadFile) {
             $this->hasLoggedAnUnreadablePayloadFile = true;
-            $this->logger->error(
-                '[LocalStore] The values kept in {file} could not be read, so they will be fetched again.',
-                ['file' => $payloadFile->path],
-            );
+            $this->logger->error($errorMessage, ['file' => $payloadFile->path]);
         }
 
         return null;
+    }
+
+    public function holdsAPayloadFile(): bool
+    {
+        return $this->usableFolder !== null && (new PayloadFile($this->usableFolder))->exists();
     }
 
     public function pollingPause(string $polledUrl): ?PollingPause

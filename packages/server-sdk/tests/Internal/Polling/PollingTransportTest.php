@@ -1244,7 +1244,34 @@ final class PollingTransportTest extends TestCase
 
         $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
 
-        self::assertSame(UndeliveredPayload::FailedPollOnRecord, $storedPayload);
+        self::assertSame(UndeliveredPayload::LastPollLeftNoValues, $storedPayload);
+        self::assertSame([], $server->requestsReceived());
+    }
+
+    public function testARequestThatFindsAPayloadFileItCannotReadBesideThePauseOfTheLastPollLeavesTheErrorOfTheStoreAsTheOnlyLine(): void
+    {
+        $server = $this->serverAnswering([['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]]]);
+        $refreshLock = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
+        self::assertNotNull($refreshLock);
+        $refreshLock->recordPollingPause(
+            $server->url . '/server/polling/v1',
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON,
+                untilEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON + 60_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
+        );
+        $refreshLock->release();
+        file_put_contents(
+            $this->storeOpenedAgain()->usableFolder . DIRECTORY_SEPARATOR . 'payload.json',
+            '{"confirmedFreshAt":',
+        );
+
+        $storedPayload = $this->transportPolling($server)->storedPayloadForInitialization();
+
+        self::assertSame(UndeliveredPayload::ReasonLoggedAsAnError, $storedPayload);
         self::assertSame([], $server->requestsReceived());
     }
 

@@ -8,4 +8,5 @@ enum AbsentPayload
 {
     case FileMissing;
     case FileUnreadable;
+    case FileTooLargeForTheMemoryLeft;
 }

@@ -9,9 +9,14 @@ use ConfigDirector\ConfigDirectorClient;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\Context;
 use ConfigDirector\TelemetryOptions;
+use ConfigDirector\Internal\LocalStore\LocalStore;
+use ConfigDirector\Tests\Support\PhpProcess;
+use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\ScriptedSdkServer;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LogLevel;
 use Psr\Log\NullLogger;
 
 final class ClientHostileInputTest extends TestCase
@@ -191,6 +196,110 @@ final class ClientHostileInputTest extends TestCase
         $client->dispose();
 
         self::assertSame('Standard banner', $banner);
+    }
+
+    public function testAPayloadFileThatNeedsMoreMemoryThanARequestHasIsReadAsAnEmptyLocalStoreAndFetchedAgain(): void
+    {
+        $this->writeTheFileOfTheLocalStore(
+            'payload.json',
+            sprintf(
+                '{"confirmedFreshAt":%d,"sessionId":"session-1","payload":{"configs":{},"padding":[%s]}}',
+                (int) floor(microtime(true) * 1_000),
+                implode(',', array_fill(0, 540_000, '{"a":1}')),
+            ),
+        );
+
+        $finishedRequest = PhpProcess::running(
+            __DIR__ . '/Processes/serve-a-request-that-reads-a-config.php',
+            [$this->storagePath, $this->server->url, '30000', ''],
+            phpSettings: ['memory_limit' => '64M'],
+            fileForStandardError: $this->storagePath . DIRECTORY_SEPARATOR . 'standard-error.txt',
+        )->finished();
+
+        self::assertSame("page-size: 25\n", $finishedRequest->output);
+        self::assertSame(0, $finishedRequest->exitCode);
+    }
+
+    public function testAPayloadFileThatNeedsMoreMemoryThanTheProcessHasLogsOneErrorNamingTheFile(): void
+    {
+        $this->writeTheFileOfTheLocalStore(
+            'payload.json',
+            sprintf(
+                '{"confirmedFreshAt":%d,"sessionId":"session-1","payload":{"configs":{},"padding":[%s]}}',
+                (int) floor(microtime(true) * 1_000),
+                implode(',', array_fill(0, 540_000, '{"a":1}')),
+            ),
+        );
+        $memoryLimitBeforeTheTest = (string) ini_get('memory_limit');
+        $logger = new RecordingLogger();
+        $store = LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger);
+
+        ini_set('memory_limit', (string) (memory_get_usage() + 64 * 1_048_576));
+        try {
+            $storedPayload = $store->storedPayload();
+            $store->storedPayload();
+        } finally {
+            ini_set('memory_limit', $memoryLimitBeforeTheTest);
+        }
+
+        self::assertNull($storedPayload);
+        self::assertSame(
+            [implode(DIRECTORY_SEPARATOR, [$this->storagePath, hash('sha256', 'server-sdk-key'), 'payload.json'])],
+            array_column($logger->contextsLoggedAt(LogLevel::ERROR), 'file'),
+        );
+    }
+
+    public function testALoggerThatReadsAConfigForEveryLineReceivesOneLineForASegmentThatCannotBeRead(): void
+    {
+        $this->writeTheFileOfTheLocalStore('payload.json', json_encode(
+            [
+                'confirmedFreshAt' => (int) floor(microtime(true) * 1_000),
+                'sessionId' => 'session-1',
+                'payload' => [
+                    'kind' => 'full',
+                    'configs' => [
+                        'page-size' => [
+                            'id' => 'config-page-size',
+                            'key' => 'page-size',
+                            'type' => 'integer',
+                            'target' => ['rules' => [], 'defaultValue' => '25', 'defaultValueId' => 'value-25'],
+                        ],
+                    ],
+                    'segments' => ['segment-without-groups' => ['name' => 'Beta testers']],
+                ],
+            ],
+            JSON_THROW_ON_ERROR,
+        ));
+        $logger = new class extends AbstractLogger {
+            public ?ConfigDirectorClient $clientItReads = null;
+
+            /** @var list<string> */
+            public array $segmentIdsItWasToldCannotBeRead = [];
+
+            /**
+             * @param array<array-key, mixed> $context
+             */
+            #[\Override]
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                if (is_string($context['segmentId'] ?? null)) {
+                    $this->segmentIdsItWasToldCannotBeRead[] = $context['segmentId'];
+                }
+                $this->clientItReads?->getValue('page-size', 10);
+            }
+        };
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: $this->server->url, storagePath: $this->storagePath),
+            logger: $logger,
+        );
+        $client->initialize();
+        $logger->clientItReads = $client;
+
+        $pageSize = $client->getValue('page-size', 10);
+
+        self::assertSame(25, $pageSize);
+        self::assertSame(['segment-without-groups'], $logger->segmentIdsItWasToldCannotBeRead);
     }
 
     public function testAReadWhoseInCodeDefaultValueContainsItselfReturnsItAndIsLeftOutOfTheReport(): void

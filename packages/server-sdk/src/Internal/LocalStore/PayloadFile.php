@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\LocalStore;
 
+use ConfigDirector\Internal\Json\DecodingMemory;
+
 final readonly class PayloadFile
 {
     private const int MAXIMUM_BYTES = 32 * 1024 * 1024;
@@ -18,15 +20,27 @@ final readonly class PayloadFile
         $this->path = $this->file->path;
     }
 
+    public function exists(): bool
+    {
+        return $this->file->exists();
+    }
+
     public function storedPayload(): StoredPayload|AbsentPayload
     {
         if (!$this->file->exists()) {
             return AbsentPayload::FileMissing;
         }
 
+        if (!DecodingMemory::isEnoughToHold(min($this->file->sizeInBytes(), self::MAXIMUM_BYTES))) {
+            return AbsentPayload::FileTooLargeForTheMemoryLeft;
+        }
+
         $json = $this->file->contentsOfAtMost(self::MAXIMUM_BYTES);
         if ($json === null) {
             return AbsentPayload::FileUnreadable;
+        }
+        if (!DecodingMemory::isEnoughFor($json)) {
+            return AbsentPayload::FileTooLargeForTheMemoryLeft;
         }
 
         return StoredPayload::fromJson($json) ?? AbsentPayload::FileUnreadable;

@@ -371,6 +371,28 @@ final class ClientTelemetryTest extends TestCase
         self::assertSame(['page-size'], array_column(array_column($evaluations, 'event'), 'key'));
     }
 
+    public function testAReadMadeByAConfigEvaluatedHandlerIsReported(): void
+    {
+        $this->startSdkServerServing([
+            'page-size' => self::configServingEveryContext('integer', '25', 'value-25'),
+            'banner' => self::configServingEveryContext('string', 'Sale', 'value-sale'),
+        ]);
+        $client = $this->initializedClient();
+        $client->on('configEvaluated', static function () use ($client): void {
+            $client->getValue('banner', 'No banner');
+        });
+        $client->getValue('page-size', 10);
+        $client->dispose();
+
+        $this->endARequestAfterTheFlushInterval();
+
+        self::assertSame(
+            ['page-size', 'banner'],
+            array_column(array_column($this->evaluationsOfTheOnlyReport(), 'event'), 'key'),
+        );
+        self::assertSame([1, 1], array_column($this->evaluationsOfTheOnlyReport(), 'count'));
+    }
+
     public function testGetAllConfigsIsNotReported(): void
     {
         $this->startSdkServerServing(['page-size' => self::configServingEveryContext('integer', '25', 'value-25')]);
