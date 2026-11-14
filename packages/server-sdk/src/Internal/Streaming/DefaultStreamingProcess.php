@@ -64,7 +64,7 @@ final class DefaultStreamingProcess implements StreamingProcess
     public function takeHoldOfTheLocalStore(): void
     {
         $store = $this->localStore->store();
-        $folder = $store->usableFolder();
+        $folder = $store->usableFolder;
         if ($folder === null) {
             throw new ConfigDirectorException('The local store cannot be used, so the streaming process cannot run.');
         }
@@ -130,14 +130,19 @@ final class DefaultStreamingProcess implements StreamingProcess
     private function sendTheStoredTelemetry(): void
     {
         $store = $this->localStore->store();
-        $storedTelemetry = $store->whileHoldingTheTelemetryLock(
-            fn(TelemetryLock $telemetryLock): ?StoredTelemetry => $this->eventReporter->sendingIsPausedUnder(
-                $telemetryLock,
-            ) ? null : $telemetryLock->takeStoredTelemetry($this->clock->epochMilliseconds()),
-        );
+        $storedTelemetry = $store->whileHoldingTheTelemetryLock($this->storedTelemetryTakenUnlessSendingIsPaused(...));
         if ($storedTelemetry !== null) {
             $this->eventReporter->send($storedTelemetry, $store);
         }
+    }
+
+    private function storedTelemetryTakenUnlessSendingIsPaused(TelemetryLock $telemetryLock): ?StoredTelemetry
+    {
+        if ($this->eventReporter->sendingIsPausedUnder($telemetryLock)) {
+            return null;
+        }
+
+        return $telemetryLock->takeStoredTelemetry($this->clock->epochMilliseconds());
     }
 
     public function letGoOfTheLocalStore(): void

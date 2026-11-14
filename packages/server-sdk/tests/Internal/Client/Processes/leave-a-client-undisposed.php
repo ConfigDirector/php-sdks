@@ -37,12 +37,12 @@ $connection = new class implements Connection {
     }
 };
 $client = new DefaultConfigDirectorClient(
-    $connection,
-    new Metadata(),
-    250,
-    new NullLogger(),
-    new EventHandlers(new NullLogger()),
-    new DiscardedTelemetry(),
+    connection: $connection,
+    metadata: new Metadata(),
+    timeoutMilliseconds: 250,
+    logger: new NullLogger(),
+    eventHandlers: new EventHandlers(new NullLogger()),
+    telemetry: new DiscardedTelemetry(),
 );
 $client->initialize();
 register_shutdown_function(static function () use ($client): void {

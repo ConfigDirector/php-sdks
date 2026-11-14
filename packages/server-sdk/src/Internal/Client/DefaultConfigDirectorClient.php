@@ -246,13 +246,13 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
     ): ConfigEvaluation {
         $admittedContext = $this->admittedContextOrNone($context);
         $inCodeDefaultValueBecauseOf = static fn(EvaluationReason $reason): ConfigEvaluation => new ConfigEvaluation(
-            $configKey,
-            $inCodeDefaultValue->value,
-            null,
-            null,
-            true,
-            $reason,
-            $admittedContext,
+            key: $configKey,
+            value: $inCodeDefaultValue->value,
+            valueId: null,
+            variation: null,
+            isDefaultValue: true,
+            reason: $reason,
+            context: $admittedContext,
         );
 
         $definition = $this->payload->configs[$configKey] ?? null;
@@ -271,22 +271,22 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             return $evaluation;
         }
 
-        $served = $this->valueServedTo($admittedContext, $definition, $this->payload);
-        $state = $definition->stateServing($served);
+        $servedValue = $this->valueServedTo($admittedContext, $definition, $this->payload);
+        $state = $definition->stateServing($servedValue);
         $typedValue = TypedValue::fromServedText($state->value, $state->type, $inCodeDefaultValue->type);
         $evaluation = $typedValue instanceof EvaluationReason
             ? $inCodeDefaultValueBecauseOf($typedValue)
             : new ConfigEvaluation(
-                $configKey,
-                $typedValue->value,
-                $state->valueId,
-                $state->variation,
-                false,
-                match ($served->servedBy) {
+                key: $configKey,
+                value: $typedValue->value,
+                valueId: $state->valueId,
+                variation: $state->variation,
+                isDefaultValue: false,
+                reason: match ($servedValue->servedBy) {
                     ServedBy::MatchingRule, ServedBy::DefaultTargetingRule => EvaluationReason::FoundMatch,
                     ServedBy::DefaultTargetingRuleAfterSkippedRollout => EvaluationReason::RolloutSkippedNoIdentifier,
                 },
-                $admittedContext,
+                context: $admittedContext,
             );
         $this->telemetry->recordEvaluation($evaluation, $inCodeDefaultValue, $state);
         $this->logger->debug(
@@ -393,12 +393,12 @@ final class DefaultConfigDirectorClient implements ConfigDirectorClient
             $definition->id,
             $definition->targetingRules,
             new EvaluationContext(
-                $context?->id,
-                $context?->kind,
-                $context?->name,
-                $context->traits ?? [],
-                $this->metadata->appName,
-                $this->metadata->appVersion,
+                identifier: $context?->id,
+                contextKind: $context?->kind,
+                name: $context?->name,
+                traits: $context->traits ?? [],
+                appName: $this->metadata->appName,
+                appVersion: $this->metadata->appVersion,
             ),
             $payload->segments,
         );

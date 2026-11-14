@@ -10,8 +10,10 @@ use ConfigDirector\ConnectionMode;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\TelemetryOptions;
 use ConfigDirector\Tests\Support\RecordingLogger;
+use ConfigDirector\Tests\Support\StackTraceArguments;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 final class CreateStreamingProcessTest extends TestCase
 {
@@ -71,6 +73,21 @@ final class CreateStreamingProcessTest extends TestCase
             connection: new ConnectionOptions(url: 'ftp://sdk-proxy.example.com'),
             logger: new RecordingLogger(),
         );
+    }
+
+    public function testARejectedUrlKeepsTheServerSdkKeyOutOfTheStackTrace(): void
+    {
+        try {
+            ConfigDirector::createStreamingProcess(
+                serverSdkKey: 'server-sdk-key-to-keep-secret',
+                connection: new ConnectionOptions(url: 'ftp://sdk-proxy.example.com'),
+                logger: new RecordingLogger(),
+            );
+            self::fail('createStreamingProcess() accepted a URL that is not http or https.');
+        } catch (ConfigDirectorValidationException $rejectedUrl) {
+        }
+
+        self::assertSame([], StackTraceArguments::holding('server-sdk-key-to-keep-secret', $rejectedUrl));
     }
 
     public function testARelativeStoragePathIsRejected(): void
@@ -137,8 +154,8 @@ final class CreateStreamingProcessTest extends TestCase
             );
 
             self::assertSame([], TemporaryFolder::entriesOf($storagePath));
-            self::assertSame([], $logger->contextsLoggedAt('warning'));
-            self::assertSame([], $logger->contextsLoggedAt('info'));
+            self::assertSame([], $logger->contextsLoggedAt(LogLevel::WARNING));
+            self::assertSame([], $logger->contextsLoggedAt(LogLevel::INFO));
         } finally {
             TemporaryFolder::remove($storagePath);
         }

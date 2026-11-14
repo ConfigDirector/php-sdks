@@ -82,13 +82,13 @@ final class LocalStoreProcessesTest extends TestCase
         $processesThatFetched = [];
         $processesWhosePayloadWasRead = [];
         foreach ($processes as $process) {
-            $result = json_decode($process->finished()->output, true);
-            self::assertIsArray($result);
-            self::assertIsString($result['fetchedBy']);
-            if ($result['hasFetched'] === true) {
-                $processesThatFetched[] = $result['process'];
+            $reportOfTheProcess = json_decode($process->finished()->output, true);
+            self::assertIsArray($reportOfTheProcess);
+            self::assertIsString($reportOfTheProcess['fetchedBy']);
+            if ($reportOfTheProcess['hasFetched'] === true) {
+                $processesThatFetched[] = $reportOfTheProcess['process'];
             }
-            $processesWhosePayloadWasRead[] = $result['fetchedBy'];
+            $processesWhosePayloadWasRead[] = $reportOfTheProcess['fetchedBy'];
         }
 
         self::assertCount(1, $processesThatFetched);

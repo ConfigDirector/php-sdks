@@ -26,9 +26,15 @@ final class ConfigEvaluatorTest extends TestCase
 
     public function testAConfigWithoutRulesServesTheDefaultTargetingRuleValue(): void
     {
-        $served = self::evaluate([], new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate([], new EvaluationContext(identifier: 'u1'));
 
-        self::assertEquals(new ServedValue('NONE', 'default-value', null, null, ServedBy::DefaultTargetingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'NONE',
+            valueId: 'default-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::DefaultTargetingRule,
+        ), $servedValue);
     }
 
     public function testTheFirstRuleThatAppliesServesItsValue(): void
@@ -39,101 +45,121 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('third', 2, 'C', self::identifierIs('u1')),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
 
-        self::assertEquals(new ServedValue('B', 'second-value', null, null, ServedBy::MatchingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'B',
+            valueId: 'second-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::MatchingRule,
+        ), $servedValue);
     }
 
     public function testRulesAreTriedInAscendingOrderRegardlessOfTheirPosition(): void
     {
         $rules = [self::valueRule('listed-first', 1, 'B'), self::valueRule('listed-second', 0, 'A')];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
 
-        self::assertSame('A', $served->value);
+        self::assertSame('A', $servedValue->value);
     }
 
     public function testRulesWithoutAnOrderAreTriedAfterEveryOrderedRule(): void
     {
         $rules = [self::valueRule('unordered', null, 'C'), self::valueRule('ordered', 5, 'A')];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
 
-        self::assertSame('A', $served->value);
+        self::assertSame('A', $servedValue->value);
     }
 
     public function testRulesWithoutAnOrderKeepTheOrderListed(): void
     {
         $rules = [self::valueRule('unordered-first', null, 'C'), self::valueRule('unordered-second', null, 'D')];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
 
-        self::assertSame('C', $served->value);
+        self::assertSame('C', $servedValue->value);
     }
 
     public function testNoRuleApplyingServesTheDefaultTargetingRuleValue(): void
     {
         $rules = [self::valueRule('only', 0, 'A', self::identifierIs('u2'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
 
-        self::assertEquals(new ServedValue('NONE', 'default-value', null, null, ServedBy::DefaultTargetingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'NONE',
+            valueId: 'default-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::DefaultTargetingRule,
+        ), $servedValue);
     }
 
     public function testAConditionalRuleAppliesWhenEveryConditionHolds(): void
     {
         $rules = [self::valueRule('both', 0, 'A', self::identifierIs('u1'), self::planIs('pro'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1', traits: ['plan' => 'pro']));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1', traits: ['plan' => 'pro']));
 
-        self::assertSame(ServedBy::MatchingRule, $served->servedBy);
+        self::assertSame(ServedBy::MatchingRule, $servedValue->servedBy);
     }
 
     public function testAConditionalRuleDoesNotApplyWhenOneConditionFails(): void
     {
         $rules = [self::valueRule('both', 0, 'A', self::identifierIs('u1'), self::planIs('pro'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1', traits: ['plan' => 'free']));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1', traits: ['plan' => 'free']));
 
-        self::assertSame(ServedBy::DefaultTargetingRule, $served->servedBy);
+        self::assertSame(ServedBy::DefaultTargetingRule, $servedValue->servedBy);
     }
 
     public function testARuleWithNoConditionsAppliesToEveryContext(): void
     {
-        $served = self::evaluate([self::valueRule('everyone', 0, 'A')], new EvaluationContext());
+        $servedValue = self::evaluate([self::valueRule('everyone', 0, 'A')], new EvaluationContext());
 
-        self::assertSame('A', $served->value);
+        self::assertSame('A', $servedValue->value);
     }
 
     public function testARuleWithAnInSegmentConditionAppliesToAContextInTheSegment(): void
     {
         $rules = [self::valueRule('acme', 0, 'A', new SegmentCondition('in', self::ACME_SEGMENT_ID))];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['email' => 'ann@acme.com']), self::acmeEmployees());
+        $servedValue = self::evaluate(
+            $rules,
+            new EvaluationContext(traits: ['email' => 'ann@acme.com']),
+            self::acmeEmployees(),
+        );
 
-        self::assertSame('A', $served->value);
+        self::assertSame('A', $servedValue->value);
     }
 
     public function testARuleWithANotInSegmentConditionAppliesToAContextOutsideTheSegment(): void
     {
         $rules = [self::valueRule('not-acme', 0, 'A', new SegmentCondition('not in', self::ACME_SEGMENT_ID))];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['email' => 'bob@example.com']), self::acmeEmployees());
+        $servedValue = self::evaluate(
+            $rules,
+            new EvaluationContext(traits: ['email' => 'bob@example.com']),
+            self::acmeEmployees(),
+        );
 
-        self::assertSame('A', $served->value);
+        self::assertSame('A', $servedValue->value);
     }
 
     public function testARuleWithASegmentConditionCombinesWithAnAttributeConditionByAnd(): void
     {
         $rules = [self::valueRule('acme-pro', 0, 'A', new SegmentCondition('in', self::ACME_SEGMENT_ID), self::planIs('pro'))];
 
-        $served = self::evaluate(
+        $servedValue = self::evaluate(
             $rules,
             new EvaluationContext(traits: ['email' => 'ann@acme.com', 'plan' => 'free']),
             self::acmeEmployees(),
         );
 
-        self::assertSame('NONE', $served->value);
+        self::assertSame('NONE', $servedValue->value);
     }
 
     public function testARuleWithASegmentConditionFallsThroughWhenThePayloadHasNoSegments(): void
@@ -143,9 +169,9 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('next', 1, 'B'),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['email' => 'bob@example.com']));
+        $servedValue = self::evaluate($rules, new EvaluationContext(traits: ['email' => 'bob@example.com']));
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     public function testARuleOfAnUnknownTypeIsSkipped(): void
@@ -155,9 +181,9 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('known', 1, 'B'),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     public function testAConditionalRuleWithAnUnknownTargetIsSkipped(): void
@@ -167,9 +193,9 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('known', 1, 'B'),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     public function testARuleServingAValueWithoutAValueIsSkipped(): void
@@ -179,25 +205,41 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('next', 1, 'B'),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     public function testARuleServingASingleValueReportsItsVariationAndNoRolloutShare(): void
     {
         $rules = [new Rule('only', 0, 'conditional', 'value', 'A', 'only-value', 'treatment')];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertEquals(new ServedValue('A', 'only-value', 'treatment', null, ServedBy::MatchingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'A',
+            valueId: 'only-value',
+            variationId: 'treatment',
+            rolloutShare: null,
+            servedBy: ServedBy::MatchingRule,
+        ), $servedValue);
     }
 
     public function testTheDefaultTargetingRuleValueReportsItsVariation(): void
     {
-        $served = self::evaluate([], new EvaluationContext(identifier: 'u1'), defaultVariationId: 'control');
+        $servedValue = self::evaluate(
+            [],
+            new EvaluationContext(identifier: 'u1'),
+            defaultTargetingRuleVariationId: 'control',
+        );
 
-        self::assertEquals(new ServedValue('NONE', 'default-value', 'control', null, ServedBy::DefaultTargetingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'NONE',
+            valueId: 'default-value',
+            variationId: 'control',
+            rolloutShare: null,
+            servedBy: ServedBy::DefaultTargetingRule,
+        ), $servedValue);
     }
 
     public function testAConditionalRuleCanServeAPercentageRollout(): void
@@ -213,11 +255,17 @@ final class ConfigEvaluatorTest extends TestCase
             ),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
         self::assertEquals(
-            new ServedValue('1', 'b1-value', null, new RolloutShare('rollout', 'b1'), ServedBy::MatchingRule),
-            $served,
+            new ServedValue(
+                value: '1',
+                valueId: 'b1-value',
+                variationId: null,
+                rolloutShare: new RolloutShare(ruleId: 'rollout', shareId: 'b1'),
+                servedBy: ServedBy::MatchingRule,
+            ),
+            $servedValue,
         );
     }
 
@@ -225,11 +273,17 @@ final class ConfigEvaluatorTest extends TestCase
     {
         $rules = [self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 50.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
         self::assertEquals(
-            new ServedValue('1', 'b1-value', null, new RolloutShare('rollout', 'b1'), ServedBy::MatchingRule),
-            $served,
+            new ServedValue(
+                value: '1',
+                valueId: 'b1-value',
+                variationId: null,
+                rolloutShare: new RolloutShare(ruleId: 'rollout', shareId: 'b1'),
+                servedBy: ServedBy::MatchingRule,
+            ),
+            $servedValue,
         );
     }
 
@@ -237,9 +291,9 @@ final class ConfigEvaluatorTest extends TestCase
     {
         $rules = [self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 50.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u4331'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u4331'));
 
-        self::assertSame('0', $served->value);
+        self::assertSame('0', $servedValue->value);
     }
 
     public function testAZeroWidthShareOnABoundaryServesNobody(): void
@@ -248,18 +302,18 @@ final class ConfigEvaluatorTest extends TestCase
             self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 0.0, '1'), self::share('b2', 50.0, '2')),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
-        self::assertSame('2', $served->value);
+        self::assertSame('2', $servedValue->value);
     }
 
     public function testALeadingZeroWidthShareServesNobody(): void
     {
         $rules = [self::percentageRule(self::share('b0', 0.0, '0'), self::share('b1', 100.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'user-1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'user-1'));
 
-        self::assertSame('1', $served->value);
+        self::assertSame('1', $servedValue->value);
     }
 
     public function testARolloutReportsItsRuleShareAndVariation(): void
@@ -271,11 +325,17 @@ final class ConfigEvaluatorTest extends TestCase
             ),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
         self::assertEquals(
-            new ServedValue('1', 'b1-value', 'treatment', new RolloutShare('rollout', 'b1'), ServedBy::MatchingRule),
-            $served,
+            new ServedValue(
+                value: '1',
+                valueId: 'b1-value',
+                variationId: 'treatment',
+                rolloutShare: new RolloutShare(ruleId: 'rollout', shareId: 'b1'),
+                servedBy: ServedBy::MatchingRule,
+            ),
+            $servedValue,
         );
     }
 
@@ -283,74 +343,86 @@ final class ConfigEvaluatorTest extends TestCase
     {
         $rules = [self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 50.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'user-1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'user-1'));
 
-        self::assertSame('0', $served->value);
+        self::assertSame('0', $servedValue->value);
     }
 
     public function testADeviceWithTheSameIdentifierAsAUserCanLandInAnotherShare(): void
     {
         $rules = [self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 50.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'user-1', contextKind: 'device'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'user-1', contextKind: 'device'));
 
-        self::assertSame('1', $served->value);
+        self::assertSame('1', $servedValue->value);
     }
 
     public function testAnExplicitUserKindLandsWhereAnOmittedKindLands(): void
     {
         $rules = [self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 50.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'user-1', contextKind: 'user'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'user-1', contextKind: 'user'));
 
-        self::assertSame('0', $served->value);
+        self::assertSame('0', $servedValue->value);
     }
 
     public function testAnEmptyIdentifierIsStillBucketed(): void
     {
         $rules = [self::percentageRule(self::share('b0', 50.0, '0'), self::share('b1', 50.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: ''));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: ''));
 
-        self::assertSame('1', $served->value);
+        self::assertSame('1', $servedValue->value);
     }
 
     public function testSharesThatDoNotCoverTheContextServeTheDefaultTargetingRuleValue(): void
     {
         $rules = [self::percentageRule(self::share('b0', 10.0, '0'), self::share('b1', 10.0, '1'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
-        self::assertEquals(new ServedValue('NONE', 'default-value', null, null, ServedBy::DefaultTargetingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'NONE',
+            valueId: 'default-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::DefaultTargetingRule,
+        ), $servedValue);
     }
 
     public function testARolloutCoveringNobodyFallsThroughToTheNextRule(): void
     {
         $rules = [self::percentageRule(self::share('b0', 0.0, '0')), self::valueRule('next', 1, 'B')];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     public function testAShareWithoutAValueFallsThroughToTheNextRule(): void
     {
         $rules = [self::percentageRule(new Share('b0', 100.0, null)), self::valueRule('next', 1, 'B')];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u582'));
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     public function testAContextWithoutAnIdentifierSkipsTheRollout(): void
     {
         $rules = [self::percentageRule(self::share('b0', 0.0, '0'), self::share('b1', 10.0, '1'), self::share('b2', 90.0, '2'))];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
         self::assertEquals(
-            new ServedValue('NONE', 'default-value', null, null, ServedBy::DefaultTargetingRuleAfterSkippedRollout),
-            $served,
+            new ServedValue(
+                value: 'NONE',
+                valueId: 'default-value',
+                variationId: null,
+                rolloutShare: null,
+                servedBy: ServedBy::DefaultTargetingRuleAfterSkippedRollout,
+            ),
+            $servedValue,
         );
     }
 
@@ -358,11 +430,17 @@ final class ConfigEvaluatorTest extends TestCase
     {
         $rules = [self::percentageRule(self::share('b0', 0.0, '0'), self::share('b1', 10.0, '1'), self::share('b2', 90.0, '2'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(contextKind: 'device'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(contextKind: 'device'));
 
         self::assertEquals(
-            new ServedValue('NONE', 'default-value', null, null, ServedBy::DefaultTargetingRuleAfterSkippedRollout),
-            $served,
+            new ServedValue(
+                value: 'NONE',
+                valueId: 'default-value',
+                variationId: null,
+                rolloutShare: null,
+                servedBy: ServedBy::DefaultTargetingRuleAfterSkippedRollout,
+            ),
+            $servedValue,
         );
     }
 
@@ -370,11 +448,17 @@ final class ConfigEvaluatorTest extends TestCase
     {
         $rules = [self::percentageRule(self::share('b0', 100.0, '0'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(), defaultVariationId: 'control');
+        $servedValue = self::evaluate($rules, new EvaluationContext(), defaultTargetingRuleVariationId: 'control');
 
         self::assertEquals(
-            new ServedValue('NONE', 'default-value', 'control', null, ServedBy::DefaultTargetingRuleAfterSkippedRollout),
-            $served,
+            new ServedValue(
+                value: 'NONE',
+                valueId: 'default-value',
+                variationId: 'control',
+                rolloutShare: null,
+                servedBy: ServedBy::DefaultTargetingRuleAfterSkippedRollout,
+            ),
+            $servedValue,
         );
     }
 
@@ -382,9 +466,15 @@ final class ConfigEvaluatorTest extends TestCase
     {
         $rules = [self::percentageRule(self::share('b0', 100.0, '0')), self::valueRule('next', 1, 'B')];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertEquals(new ServedValue('B', 'next-value', null, null, ServedBy::MatchingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'B',
+            valueId: 'next-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::MatchingRule,
+        ), $servedValue);
     }
 
     public function testAContextWithoutAnIdentifierMatchingAConditionalRolloutIsServedByALaterRuleOnTheAppVersion(): void
@@ -401,18 +491,24 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('version-2', 1, 'B', new AttributeCondition('appVersion', null, '>=', 'semver', ['2.0.0'])),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'pro'], appVersion: '2.1.0'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'pro'], appVersion: '2.1.0'));
 
-        self::assertEquals(new ServedValue('B', 'version-2-value', null, null, ServedBy::MatchingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'B',
+            valueId: 'version-2-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::MatchingRule,
+        ), $servedValue);
     }
 
     public function testAContextWithoutAnIdentifierMatchingNoRuleAfterASkippedRolloutGetsTheDefaultTargetingRuleValue(): void
     {
         $rules = [self::percentageRule(self::share('b0', 100.0, '0')), self::valueRule('next', 1, 'B', self::planIs('pro'))];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'free']));
+        $servedValue = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'free']));
 
-        self::assertSame(ServedBy::DefaultTargetingRuleAfterSkippedRollout, $served->servedBy);
+        self::assertSame(ServedBy::DefaultTargetingRuleAfterSkippedRollout, $servedValue->servedBy);
     }
 
     public function testARuleBeforeTheRolloutStillServesAContextWithoutAnIdentifier(): void
@@ -422,9 +518,15 @@ final class ConfigEvaluatorTest extends TestCase
             self::valueRule('first', 0, 'A'),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertEquals(new ServedValue('A', 'first-value', null, null, ServedBy::MatchingRule), $served);
+        self::assertEquals(new ServedValue(
+            value: 'A',
+            valueId: 'first-value',
+            variationId: null,
+            rolloutShare: null,
+            servedBy: ServedBy::MatchingRule,
+        ), $servedValue);
     }
 
     public function testAConditionalRolloutWhoseConditionsHoldIsSkippedForAContextWithoutAnIdentifier(): void
@@ -440,9 +542,9 @@ final class ConfigEvaluatorTest extends TestCase
             ),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'pro']));
+        $servedValue = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'pro']));
 
-        self::assertSame(ServedBy::DefaultTargetingRuleAfterSkippedRollout, $served->servedBy);
+        self::assertSame(ServedBy::DefaultTargetingRuleAfterSkippedRollout, $servedValue->servedBy);
     }
 
     public function testAConditionalRolloutWhoseConditionsFailIsNotSkippedForAContextWithoutAnIdentifier(): void
@@ -458,36 +560,36 @@ final class ConfigEvaluatorTest extends TestCase
             ),
         ];
 
-        $served = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'free']));
+        $servedValue = self::evaluate($rules, new EvaluationContext(traits: ['plan' => 'free']));
 
-        self::assertSame(ServedBy::DefaultTargetingRule, $served->servedBy);
+        self::assertSame(ServedBy::DefaultTargetingRule, $servedValue->servedBy);
     }
 
     public function testARolloutWithoutAShareListIsNotSkippedForAContextWithoutAnIdentifier(): void
     {
         $rules = [new Rule('rollout', 0, 'percentage', 'percentage')];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertSame(ServedBy::DefaultTargetingRule, $served->servedBy);
+        self::assertSame(ServedBy::DefaultTargetingRule, $servedValue->servedBy);
     }
 
     public function testARolloutWithAnEmptyShareListIsSkippedForAContextWithoutAnIdentifier(): void
     {
         $rules = [self::percentageRule()];
 
-        $served = self::evaluate($rules, new EvaluationContext());
+        $servedValue = self::evaluate($rules, new EvaluationContext());
 
-        self::assertSame(ServedBy::DefaultTargetingRuleAfterSkippedRollout, $served->servedBy);
+        self::assertSame(ServedBy::DefaultTargetingRuleAfterSkippedRollout, $servedValue->servedBy);
     }
 
     public function testARolloutWithAnEmptyShareListFallsThroughForAContextWithAnIdentifier(): void
     {
         $rules = [self::percentageRule(), self::valueRule('next', 1, 'B')];
 
-        $served = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
+        $servedValue = self::evaluate($rules, new EvaluationContext(identifier: 'u1'));
 
-        self::assertSame('B', $served->value);
+        self::assertSame('B', $servedValue->value);
     }
 
     /**
@@ -498,9 +600,14 @@ final class ConfigEvaluatorTest extends TestCase
         array $rules,
         EvaluationContext $context,
         array $segments = [],
-        ?string $defaultVariationId = null,
+        ?string $defaultTargetingRuleVariationId = null,
     ): ServedValue {
-        $targetingRules = new TargetingRules('NONE', 'default-value', $defaultVariationId, $rules);
+        $targetingRules = new TargetingRules(
+            defaultTargetingRuleValue: 'NONE',
+            defaultTargetingRuleValueId: 'default-value',
+            defaultTargetingRuleVariationId: $defaultTargetingRuleVariationId,
+            rules: $rules,
+        );
 
         return (new ConfigEvaluator())->evaluate(self::CONTRACT_CONFIG_ID, $targetingRules, $context, $segments);
     }

@@ -52,13 +52,13 @@ final class ClientServerSdkPayloadTest extends TestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'checkout-banner',
-                'upgrade-thanks',
-                'value-upgrade-thanks',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                new Context(id: 'user-1', traits: ['plan' => 'pro']),
+                key: 'checkout-banner',
+                value: 'upgrade-thanks',
+                valueId: 'value-upgrade-thanks',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: new Context(id: 'user-1', traits: ['plan' => 'pro']),
             ),
             $evaluation,
         );
@@ -76,13 +76,13 @@ final class ClientServerSdkPayloadTest extends TestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'checkout-banner',
-                'upgrade-offer',
-                'value-id-of-checkout-banner',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                new Context(id: 'user-2', traits: ['plan' => 'free']),
+                key: 'checkout-banner',
+                value: 'upgrade-offer',
+                valueId: 'value-id-of-checkout-banner',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: new Context(id: 'user-2', traits: ['plan' => 'free']),
             ),
             $evaluation,
         );
@@ -158,14 +158,14 @@ final class ClientServerSdkPayloadTest extends TestCase
 
         self::assertEquals(
             new ConfigState(
-                '6d5c4b3a-2f1e-4d0c-9b8a-7f6e5d4c3b2a',
-                'new-checkout',
-                'string',
-                'treatment',
-                'value-treatment',
-                new Variation('variation-treatment', 'Treatment'),
-                'rule-rollout',
-                'share-treatment',
+                id: '6d5c4b3a-2f1e-4d0c-9b8a-7f6e5d4c3b2a',
+                key: 'new-checkout',
+                type: 'string',
+                value: 'treatment',
+                valueId: 'value-treatment',
+                variation: new Variation('variation-treatment', 'Treatment'),
+                ruleId: 'rule-rollout',
+                shareId: 'share-treatment',
             ),
             $state,
         );
@@ -277,13 +277,13 @@ final class ClientServerSdkPayloadTest extends TestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'broken-config',
-                'fallback',
-                null,
-                null,
-                true,
-                EvaluationReason::ConfigStateMissing,
-                null,
+                key: 'broken-config',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
             ),
             $evaluation,
         );

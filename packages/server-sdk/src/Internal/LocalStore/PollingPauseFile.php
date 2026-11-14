@@ -20,9 +20,9 @@ final readonly class PollingPauseFile
 
     public function pollingPause(): ?PollingPause
     {
-        $json = $this->file->exists() ? $this->file->contentsOfAtMost(self::MAXIMUM_BYTES) : false;
+        $json = $this->file->exists() ? $this->file->contentsOfAtMost(self::MAXIMUM_BYTES) : null;
 
-        return $json === false ? null : PollingPause::fromJson($json);
+        return $json === null ? null : PollingPause::fromJson($json);
     }
 
     public function replaceWith(PollingPause $pollingPause): bool

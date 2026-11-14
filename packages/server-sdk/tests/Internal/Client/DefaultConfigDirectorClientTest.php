@@ -29,17 +29,17 @@ final class DefaultConfigDirectorClientTest extends TestCase
     {
         $updates = [];
         $client = new DefaultConfigDirectorClient(
-            self::connectionDelivering(
+            connection: self::connectionDelivering(
                 self::payloadWith('integer-config', 'day-of-the-week-config', 'float-config'),
                 self::payloadWith('day-of-the-week-config'),
             ),
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-            new DiscardedTelemetry(),
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: new EventHandlers(new RecordingLogger()),
+            telemetry: new DiscardedTelemetry(),
         );
-        $client->on('configsUpdated', function (ConfigsUpdatedEvent $update) use (&$updates): void {
+        $client->on('configsUpdated', static function (ConfigsUpdatedEvent $update) use (&$updates): void {
             $updates[] = $update;
         });
         $client->initialize();
@@ -59,17 +59,17 @@ final class DefaultConfigDirectorClientTest extends TestCase
     {
         $values = [];
         $client = new DefaultConfigDirectorClient(
-            self::connectionDelivering(
+            connection: self::connectionDelivering(
                 self::payloadWith('integer-config', 'day-of-the-week-config'),
                 self::payloadWith('day-of-the-week-config'),
             ),
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-            new DiscardedTelemetry(),
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: new EventHandlers(new RecordingLogger()),
+            telemetry: new DiscardedTelemetry(),
         );
-        $client->watch('integer-config', 'fallback', function (string $value) use (&$values): void {
+        $client->watch('integer-config', 'fallback', static function (string $value) use (&$values): void {
             $values[] = $value;
         });
         $client->initialize();
@@ -100,12 +100,12 @@ final class DefaultConfigDirectorClientTest extends TestCase
             public function close(): void {}
         };
         $client = new DefaultConfigDirectorClient(
-            $connection,
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-            new DiscardedTelemetry(),
+            connection: $connection,
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: new EventHandlers(new RecordingLogger()),
+            telemetry: new DiscardedTelemetry(),
         );
         $client->initialize();
         $client->dispose();
@@ -119,12 +119,12 @@ final class DefaultConfigDirectorClientTest extends TestCase
     {
         $connection = self::connectionCountingItsCloses();
         $client = new DefaultConfigDirectorClient(
-            $connection,
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-            new DiscardedTelemetry(),
+            connection: $connection,
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: new EventHandlers(new RecordingLogger()),
+            telemetry: new DiscardedTelemetry(),
         );
 
         $client->dispose();
@@ -136,12 +136,12 @@ final class DefaultConfigDirectorClientTest extends TestCase
     {
         $connection = self::connectionCountingItsCloses();
         $client = new DefaultConfigDirectorClient(
-            $connection,
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-            new DiscardedTelemetry(),
+            connection: $connection,
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: new EventHandlers(new RecordingLogger()),
+            telemetry: new DiscardedTelemetry(),
         );
         $client->dispose();
 
@@ -154,12 +154,12 @@ final class DefaultConfigDirectorClientTest extends TestCase
     {
         $connection = self::connectionCountingItsCloses();
         $client = new DefaultConfigDirectorClient(
-            $connection,
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            new EventHandlers(new RecordingLogger()),
-            new DiscardedTelemetry(),
+            connection: $connection,
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: new EventHandlers(new RecordingLogger()),
+            telemetry: new DiscardedTelemetry(),
         );
 
         unset($client);
@@ -172,17 +172,17 @@ final class DefaultConfigDirectorClientTest extends TestCase
         $eventHandlers = new EventHandlers(new RecordingLogger());
         $error = new ConfigDirectorConnectionException('Connection failed with status: 401', 401);
         $client = new DefaultConfigDirectorClient(
-            self::connectionCountingItsCloses(static function () use ($eventHandlers, $error): void {
+            connection: self::connectionCountingItsCloses(static function () use ($eventHandlers, $error): void {
                 $eventHandlers->deliverConnectionError($error);
             }),
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            $eventHandlers,
-            new DiscardedTelemetry(),
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: $eventHandlers,
+            telemetry: new DiscardedTelemetry(),
         );
         $eventsReceived = [];
-        $client->on('connectionError', function (ConnectionErrorEvent $event) use (&$eventsReceived): void {
+        $client->on('connectionError', static function (ConnectionErrorEvent $event) use (&$eventsReceived): void {
             $eventsReceived[] = $event;
         });
 
@@ -195,18 +195,18 @@ final class DefaultConfigDirectorClientTest extends TestCase
     {
         $eventHandlers = new EventHandlers(new RecordingLogger());
         $client = new DefaultConfigDirectorClient(
-            self::connectionCountingItsCloses(static function () use ($eventHandlers): void {
+            connection: self::connectionCountingItsCloses(static function () use ($eventHandlers): void {
                 $eventHandlers->deliverConnectionError(new ConfigDirectorConnectionException('refused', 401));
             }),
-            new Metadata(),
-            250,
-            new RecordingLogger(),
-            $eventHandlers,
-            new DiscardedTelemetry(),
+            metadata: new Metadata(),
+            timeoutMilliseconds: 250,
+            logger: new RecordingLogger(),
+            eventHandlers: $eventHandlers,
+            telemetry: new DiscardedTelemetry(),
         );
         $client->initialize();
         $valuesRead = [];
-        $client->on('connectionError', function () use ($client, &$valuesRead): void {
+        $client->on('connectionError', static function () use ($client, &$valuesRead): void {
             $valuesRead[] = $client->getValue('integer-config', 'fallback');
         });
 
@@ -248,7 +248,12 @@ final class DefaultConfigDirectorClientTest extends TestCase
                 "id-of-{$configKey}",
                 $configKey,
                 'string',
-                new TargetingRules("value-of-{$configKey}", "value-id-of-{$configKey}", null, []),
+                new TargetingRules(
+                    defaultTargetingRuleValue: "value-of-{$configKey}",
+                    defaultTargetingRuleValueId: "value-id-of-{$configKey}",
+                    defaultTargetingRuleVariationId: null,
+                    rules: [],
+                ),
             );
         }
 

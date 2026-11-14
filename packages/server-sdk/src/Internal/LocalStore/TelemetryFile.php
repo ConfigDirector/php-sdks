@@ -55,9 +55,9 @@ final readonly class TelemetryFile
      */
     public function lines(): array
     {
-        $contents = $this->file->exists() ? $this->file->contentsOfAtMost(self::MAXIMUM_BYTES) : false;
+        $contents = $this->file->exists() ? $this->file->contentsOfAtMost(self::MAXIMUM_BYTES) : null;
 
-        return $contents === false
+        return $contents === null
             ? []
             : array_values(array_filter(explode("\n", $contents), static fn(string $line): bool => $line !== ''));
     }

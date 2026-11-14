@@ -17,22 +17,24 @@ final class ConfigEvaluator
     ): ServedValue {
         $aRolloutWasSkipped = false;
         foreach (self::inEvaluationOrder($targetingRules->rules) as $rule) {
-            $served = $rule->serve($configId, $context, $segments);
-            if ($served instanceof ServedValue) {
-                return $served;
+            $servedValueOrFallThrough = $rule->serve($configId, $context, $segments);
+            if ($servedValueOrFallThrough instanceof ServedValue) {
+                return $servedValueOrFallThrough;
             }
-            $aRolloutWasSkipped = match ($served) {
+            $aRolloutWasSkipped = match ($servedValueOrFallThrough) {
                 FallThrough::RolloutSkippedNoIdentifier => true,
                 FallThrough::NotMatched => $aRolloutWasSkipped,
             };
         }
 
         return new ServedValue(
-            $targetingRules->defaultValue,
-            $targetingRules->defaultValueId,
-            $targetingRules->defaultVariationId,
-            null,
-            $aRolloutWasSkipped ? ServedBy::DefaultTargetingRuleAfterSkippedRollout : ServedBy::DefaultTargetingRule,
+            value: $targetingRules->defaultTargetingRuleValue,
+            valueId: $targetingRules->defaultTargetingRuleValueId,
+            variationId: $targetingRules->defaultTargetingRuleVariationId,
+            rolloutShare: null,
+            servedBy: $aRolloutWasSkipped
+                ? ServedBy::DefaultTargetingRuleAfterSkippedRollout
+                : ServedBy::DefaultTargetingRule,
         );
     }
 

@@ -25,7 +25,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$days): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$days): void {
             $days[] = $day;
         });
 
@@ -45,7 +45,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
         $client->watch(
             'day-of-the-week-config',
             'Friday',
-            function (string $day) use (&$days): void {
+            static function (string $day) use (&$days): void {
                 $days[] = $day;
             },
             new Context(id: 'user-1', traits: ['plan' => 'pro']),
@@ -66,7 +66,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
         );
         $client->initialize();
 
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$days): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$days): void {
             $days[] = $day;
         });
 
@@ -93,9 +93,11 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
-                $evaluations[] = $event->evaluation;
-            }),
+            hooks: new ClientHooks(
+                configEvaluated: static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+                    $evaluations[] = $event->evaluation;
+                },
+            ),
         );
         $client->watch('day-of-the-week-config', 'Friday', static function (): void {});
 
@@ -104,13 +106,13 @@ final class ClientWatchesTest extends SampleConfigsTestCase
         self::assertEquals(
             [
                 new ConfigEvaluation(
-                    'day-of-the-week-config',
-                    'Monday',
-                    'value-monday',
-                    null,
-                    false,
-                    EvaluationReason::FoundMatch,
-                    null,
+                    key: 'day-of-the-week-config',
+                    value: 'Monday',
+                    valueId: 'value-monday',
+                    variation: null,
+                    isDefaultValue: false,
+                    reason: EvaluationReason::FoundMatch,
+                    context: null,
                 ),
             ],
             $evaluations,
@@ -125,15 +127,15 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(
-                clientReady: function () use (&$calls): void {
+                clientReady: static function () use (&$calls): void {
                     $calls[] = 'clientReady';
                 },
-                configsUpdated: function () use (&$calls): void {
+                configsUpdated: static function () use (&$calls): void {
                     $calls[] = 'configsUpdated';
                 },
             ),
         );
-        $client->watch('integer-config', 10, function () use (&$calls): void {
+        $client->watch('integer-config', 10, static function () use (&$calls): void {
             $calls[] = 'watch';
         });
 
@@ -150,7 +152,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $recordDay = function (string $day) use (&$days): void {
+        $recordDay = static function (string $day) use (&$days): void {
             $days[] = $day;
         };
         $client->watch('day-of-the-week-config', 'Friday', $recordDay);
@@ -175,11 +177,11 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $first = function (string $day) use (&$calls): void {
+        $first = static function (string $day) use (&$calls): void {
             $calls[] = "first {$day}";
         };
         $client->watch('day-of-the-week-config', 'Friday', $first);
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$calls): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$calls): void {
             $calls[] = "second {$day}";
         });
 
@@ -197,7 +199,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $recordDay = function (string $day) use (&$days): void {
+        $recordDay = static function (string $day) use (&$days): void {
             $days[] = $day;
         };
         $client->watch('day-of-the-week-config', 'Friday', $recordDay);
@@ -222,13 +224,13 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$calls): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$calls): void {
             $calls[] = "first {$day}";
         });
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$calls): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$calls): void {
             $calls[] = "second {$day}";
         });
-        $client->watch('integer-config', 10, function (int $number) use (&$calls): void {
+        $client->watch('integer-config', 10, static function (int $number) use (&$calls): void {
             $calls[] = "integer {$number}";
         });
 
@@ -246,10 +248,10 @@ final class ClientWatchesTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$calls): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$calls): void {
             $calls[] = $day;
         });
-        $client->watch('integer-config', 10, function (int $number) use (&$calls): void {
+        $client->watch('integer-config', 10, static function (int $number) use (&$calls): void {
             $calls[] = $number;
         });
 
@@ -272,7 +274,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
         $client->watch('integer-config', 10, static function () use ($exception): void {
             throw $exception;
         });
-        $client->watch('day-of-the-week-config', 'Friday', function (string $day) use (&$days): void {
+        $client->watch('day-of-the-week-config', 'Friday', static function (string $day) use (&$days): void {
             $days[] = $day;
         });
 

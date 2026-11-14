@@ -6,7 +6,6 @@ namespace ConfigDirector\Internal\Client;
 
 use ConfigDirector\ClientHooks;
 use ConfigDirector\ConfigDirectorClient;
-use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConnectionMode;
 use ConfigDirector\ConnectionOptions;
@@ -39,19 +38,20 @@ final class ClientFactory
 
     public static function clientIdentifiedAs(
         SdkIdentity $sdkIdentity,
+        #[\SensitiveParameter]
         ?string $serverSdkKey,
         ?Metadata $metadata,
         ?ConnectionOptions $connectionOptions,
         ?LoggerInterface $logger,
         ?string $logLevel,
-        ?TelemetryOptions $telemetry,
+        ?TelemetryOptions $telemetryOptions,
         ?ClientHooks $hooks,
     ): ConfigDirectorClient {
         $metadata ??= new Metadata();
         $connectionOptions ??= new ConnectionOptions();
-        $telemetry ??= new TelemetryOptions();
+        $telemetryOptions ??= new TelemetryOptions();
         $logger ??= OptionRules::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
-        OptionRules::rejectUnusableTelemetry($telemetry);
+        OptionRules::rejectUnusableTelemetry($telemetryOptions);
         $eventHandlers = new EventHandlers($logger);
         [$connection, $clientTelemetry] = match ($connectionOptions->mode) {
             ConnectionMode::Offline => [
@@ -63,7 +63,7 @@ final class ClientFactory
                 self::serverSdkKeyOfAUsableConnection($serverSdkKey, $connectionOptions),
                 $metadata,
                 $connectionOptions,
-                $telemetry,
+                $telemetryOptions,
                 $logger,
                 $eventHandlers,
             ),
@@ -89,7 +89,7 @@ final class ClientFactory
         $timeout ??= (new ConnectionOptions())->timeout;
         OptionRules::rejectUnusableTimeout($timeout);
         $eventHandlers = new EventHandlers($logger);
-        $telemetry = new TrackedEventRecordingTelemetry($logger);
+        $clientTelemetry = new TrackedEventRecordingTelemetry($logger);
         $connection = InMemoryConnection::servingTheValues(
             $values ?? [],
             $timeout,
@@ -102,11 +102,11 @@ final class ClientFactory
             $timeout,
             $logger,
             $eventHandlers,
-            $telemetry,
+            $clientTelemetry,
         );
         $connection->deliverPayloadsTo($client->takeIn(...));
 
-        return new TestClient($client, $connection, $telemetry);
+        return new TestClient($client, $connection, $clientTelemetry);
     }
 
     private static function offlineConnectionServingTheValuesIn(ConnectionOptions $connectionOptions): Connection
@@ -127,10 +127,11 @@ final class ClientFactory
      */
     private static function connectionAndTelemetryOfTheLocalStore(
         SdkIdentity $sdkIdentity,
+        #[\SensitiveParameter]
         string $serverSdkKey,
         Metadata $metadata,
         ConnectionOptions $connectionOptions,
-        TelemetryOptions $telemetry,
+        TelemetryOptions $telemetryOptions,
         LoggerInterface $logger,
         EventHandlers $eventHandlers,
     ): array {
@@ -147,7 +148,7 @@ final class ClientFactory
         }
 
         $clock = new SystemClock();
-        $clientLifetime = new ClientLifetime($clock, $telemetry->flushInterval);
+        $clientLifetime = new ClientLifetime($clock, $telemetryOptions->flushInterval);
         $localStore = new LocalStoreOpenedOnFirstUse($serverSdkKey, $connectionOptions->storagePath, $logger);
 
         return [
@@ -160,9 +161,7 @@ final class ClientFactory
                     $clientLifetime,
                     $clock,
                     $logger,
-                    static function (ConfigDirectorConnectionException $error) use ($eventHandlers): void {
-                        $eventHandlers->deliverConnectionError($error);
-                    },
+                    $eventHandlers->deliverConnectionError(...),
                     $reportPayloadReceivedByAPoll,
                 ),
                 $logger,
@@ -171,12 +170,12 @@ final class ClientFactory
                 $localStore,
                 new EventReporter(
                     new TelemetryEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
-                    $telemetry->eventQueueLimit,
+                    $telemetryOptions->eventQueueLimit,
                     $clock,
                     $logger,
                 ),
-                $telemetry->eventQueueLimit,
-                $telemetry->flushInterval,
+                $telemetryOptions->eventQueueLimit,
+                $telemetryOptions->flushInterval,
                 $clientLifetime,
                 $clock,
                 $logger,
@@ -205,6 +204,7 @@ final class ClientFactory
     }
 
     private static function serverSdkKeyOfAUsableConnection(
+        #[\SensitiveParameter]
         ?string $serverSdkKey,
         ConnectionOptions $connectionOptions,
     ): string {

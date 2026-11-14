@@ -25,11 +25,11 @@ final class EventStreamParser
     private ?int $retryMilliseconds = null;
 
     /**
-     * @param \Closure(ServerSentEvent): void $onEvent
+     * @param \Closure(ServerSentEvent): void $deliverEvent
      */
     public function __construct(
         private string $lastEventId,
-        private readonly \Closure $onEvent,
+        private readonly \Closure $deliverEvent,
     ) {}
 
     public function feed(string $chunk): void
@@ -131,7 +131,7 @@ final class EventStreamParser
         $this->eventType = '';
         $this->eventData = null;
         if ($event->data !== '') {
-            ($this->onEvent)($event);
+            ($this->deliverEvent)($event);
         }
     }
 }

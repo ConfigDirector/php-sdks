@@ -78,7 +78,15 @@ final class ClientLifecycleTest extends SampleConfigsTestCase
         $evaluation = $client->evaluate('integer-config', 10);
 
         self::assertEquals(
-            new ConfigEvaluation('integer-config', 10, null, null, true, EvaluationReason::ClientNotReady, null),
+            new ConfigEvaluation(
+                key: 'integer-config',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ClientNotReady,
+                context: null,
+            ),
             $evaluation,
         );
     }

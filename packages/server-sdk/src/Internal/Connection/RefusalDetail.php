@@ -10,7 +10,7 @@ final class RefusalDetail
 
     private function __construct() {}
 
-    public static function in(string $responseBody, string $serverSdkKey): string
+    public static function in(string $responseBody, #[\SensitiveParameter] string $serverSdkKey): string
     {
         $detail = str_replace($serverSdkKey, '[the server SDK key]', $responseBody);
 

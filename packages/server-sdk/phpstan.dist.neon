@@ -3,3 +3,23 @@ parameters:
     paths:
         - src
         - tests
+    checkDynamicProperties: true
+    checkExplicitMixedMissingReturn: true
+    checkFunctionNameCase: true
+    checkInternalClassCaseSensitivity: true
+    checkMissingOverrideMethodAttribute: true
+    checkStrictPrintfPlaceholderTypes: true
+    checkTooWideReturnTypesInProtectedAndPublicMethods: true
+    checkUninitializedProperties: true
+    additionalConstructors:
+        - PHPUnit\Framework\TestCase::setUp
+    polluteScopeWithAlwaysIterableForeach: false
+    polluteScopeWithBlock: false
+    polluteScopeWithLoopInitialAssignments: false
+    rememberPossiblyImpureFunctionValues: false
+    reportAlwaysTrueInLastCondition: true
+    reportAnyTypeWideningInVarTag: true
+    reportMaybesInMethodSignatures: true
+    reportMaybesInPropertyPhpDocTypes: true
+    reportStaticMethodSignatures: true
+    reportWrongPhpDocTypeInVarTag: true

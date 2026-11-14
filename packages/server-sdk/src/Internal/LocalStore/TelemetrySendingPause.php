@@ -33,11 +33,7 @@ final readonly class TelemetrySendingPause
 
     public static function fromJson(string $json): ?self
     {
-        try {
-            $fileContents = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return null;
-        }
+        $fileContents = json_decode($json, associative: true);
         if (!is_array($fileContents)) {
             return null;
         }

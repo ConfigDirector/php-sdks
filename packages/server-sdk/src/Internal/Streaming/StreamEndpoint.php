@@ -24,6 +24,7 @@ final readonly class StreamEndpoint
 
     public function __construct(
         string $baseUrl,
+        #[\SensitiveParameter]
         private string $serverSdkKey,
         Metadata $metadata,
         private SdkIdentity $sdkIdentity,
@@ -72,7 +73,7 @@ final readonly class StreamEndpoint
     /**
      * @param array<string, string|array<string, string>> $requestBody
      */
-    private static function jsonOf(array $requestBody): string
+    private static function jsonOf(#[\SensitiveParameter] array $requestBody): string
     {
         return json_encode(
             $requestBody,

@@ -76,8 +76,12 @@ final class ServerSdkPayloadParser
     {
         $variations = [];
         foreach (self::listIn($wireConfig, 'variations', 'the config') as $wireVariation) {
-            $variationId = is_array($wireVariation) ? self::textOrNullIn($wireVariation, 'id') : null;
-            if (is_array($wireVariation) && $variationId !== null) {
+            if (!is_array($wireVariation)) {
+                continue;
+            }
+
+            $variationId = self::textOrNullIn($wireVariation, 'id');
+            if ($variationId !== null) {
                 $variations[] = new Variation($variationId, self::textOrNullIn($wireVariation, 'name'));
             }
         }
@@ -132,7 +136,7 @@ final class ServerSdkPayloadParser
             throw new UnreadableDefinition('a condition is not an object');
         }
 
-        $kind = $wireCondition['kind'] ?? 'attribute';
+        $kind = self::kindOf($wireCondition);
 
         return match ($kind) {
             'attribute' => self::attributeConditionDefinedBy($wireCondition),
@@ -145,6 +149,14 @@ final class ServerSdkPayloadParser
                 ScalarText::of($kind) ?? get_debug_type($kind),
             )),
         };
+    }
+
+    /**
+     * @param array<array-key, mixed> $wireCondition
+     */
+    private static function kindOf(array $wireCondition): mixed
+    {
+        return $wireCondition['kind'] ?? 'attribute';
     }
 
     /**
@@ -186,9 +198,7 @@ final class ServerSdkPayloadParser
 
         $conditions = [];
         foreach ($wireGroup as $wireCondition) {
-            $isAnAttributeCondition = is_array($wireCondition)
-                && ($wireCondition['kind'] ?? 'attribute') === 'attribute';
-            if (!is_array($wireCondition) || !$isAnAttributeCondition) {
+            if (!is_array($wireCondition) || self::kindOf($wireCondition) !== 'attribute') {
                 throw new UnreadableDefinition('a condition group of the segment holds attribute conditions only');
             }
             $conditions[] = self::attributeConditionDefinedBy($wireCondition);

@@ -54,7 +54,15 @@ final class ClientOfflineTest extends TestCase
 
         self::assertTrue($client->isReady());
         self::assertEquals(
-            new ConfigEvaluation('page-size', 10, null, null, true, EvaluationReason::ConfigStateMissing, null),
+            new ConfigEvaluation(
+                key: 'page-size',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            ),
             $client->evaluate('page-size', 10),
         );
     }
@@ -93,11 +101,22 @@ final class ClientOfflineTest extends TestCase
         $context = new Context(id: 'user-123');
 
         $client->initialize();
+        $evaluation = $client->evaluate('new-checkout', false, $context);
 
         self::assertEquals(
-            new ConfigEvaluation('new-checkout', true, null, null, false, EvaluationReason::FoundMatch, $context),
-            $client->evaluate('new-checkout', false, $context),
+            new ConfigEvaluation(
+                key: 'new-checkout',
+                value: true,
+                valueId: null,
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: $context,
+            ),
+            $evaluation,
         );
+        self::assertNull($evaluation->valueId);
+        self::assertNull($evaluation->variation);
     }
 
     public function testEveryContextReceivesTheSameOfflineValue(): void
@@ -127,7 +146,15 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            new ConfigEvaluation('page-size', 10, null, null, true, EvaluationReason::ConfigStateMissing, null),
+            new ConfigEvaluation(
+                key: 'page-size',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            ),
             $client->evaluate('page-size', 10),
         );
     }
@@ -142,7 +169,15 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            new ConfigEvaluation('new-checkout', 'fallback', null, null, true, EvaluationReason::TypeMismatch, null),
+            new ConfigEvaluation(
+                key: 'new-checkout',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::TypeMismatch,
+                context: null,
+            ),
             $client->evaluate('new-checkout', 'fallback'),
         );
     }
@@ -161,9 +196,14 @@ final class ClientOfflineTest extends TestCase
 
         self::assertEquals(
             [
-                'new-checkout' => new ConfigState('offline:new-checkout', 'new-checkout', 'boolean', 'true'),
-                'max-items' => new ConfigState('offline:max-items', 'max-items', 'integer', '20'),
-                'greeting' => new ConfigState('offline:greeting', 'greeting', 'string', 'hello'),
+                'new-checkout' => new ConfigState(
+                    id: 'offline:new-checkout',
+                    key: 'new-checkout',
+                    type: 'boolean',
+                    value: 'true',
+                ),
+                'max-items' => new ConfigState(id: 'offline:max-items', key: 'max-items', type: 'integer', value: '20'),
+                'greeting' => new ConfigState(id: 'offline:greeting', key: 'greeting', type: 'string', value: 'hello'),
             ],
             $client->getAllConfigs(new Context(id: 'user-123')),
         );
@@ -191,7 +231,7 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['max-items' => new ConfigState('offline:max-items', 'max-items', 'float', '25')],
+            ['max-items' => new ConfigState(id: 'offline:max-items', key: 'max-items', type: 'float', value: '25')],
             $client->getAllConfigs(),
         );
     }
@@ -206,7 +246,7 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['max-items' => new ConfigState('offline:max-items', 'max-items', 'float', '2000')],
+            ['max-items' => new ConfigState(id: 'offline:max-items', key: 'max-items', type: 'float', value: '2000')],
             $client->getAllConfigs(),
         );
     }
@@ -221,7 +261,12 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['discount-rate' => new ConfigState('offline:discount-rate', 'discount-rate', 'float', '0.15')],
+            ['discount-rate' => new ConfigState(
+                id: 'offline:discount-rate',
+                key: 'discount-rate',
+                type: 'float',
+                value: '0.15',
+            )],
             $client->getAllConfigs(),
         );
     }
@@ -236,7 +281,12 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['discount-rate' => new ConfigState('offline:discount-rate', 'discount-rate', 'float', '0')],
+            ['discount-rate' => new ConfigState(
+                id: 'offline:discount-rate',
+                key: 'discount-rate',
+                type: 'float',
+                value: '0',
+            )],
             $client->getAllConfigs(),
         );
     }
@@ -251,7 +301,12 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['tolerance' => new ConfigState('offline:tolerance', 'tolerance', 'float', '0.0000001')],
+            ['tolerance' => new ConfigState(
+                id: 'offline:tolerance',
+                key: 'tolerance',
+                type: 'float',
+                value: '0.0000001',
+            )],
             $client->getAllConfigs(),
         );
     }
@@ -266,7 +321,12 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['distance' => new ConfigState('offline:distance', 'distance', 'float', '-15000000000000000000000000')],
+            ['distance' => new ConfigState(
+                id: 'offline:distance',
+                key: 'distance',
+                type: 'float',
+                value: '-15000000000000000000000000',
+            )],
             $client->getAllConfigs(),
         );
     }
@@ -281,7 +341,12 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['discount-rate' => new ConfigState('offline:discount-rate', 'discount-rate', 'float', '123.456')],
+            ['discount-rate' => new ConfigState(
+                id: 'offline:discount-rate',
+                key: 'discount-rate',
+                type: 'float',
+                value: '123.456',
+            )],
             $client->getAllConfigs(),
         );
     }
@@ -301,10 +366,10 @@ final class ClientOfflineTest extends TestCase
         self::assertEquals(
             [
                 'theme' => new ConfigState(
-                    'offline:theme',
-                    'theme',
-                    'json',
-                    '{"link":"https://example.com/café","sizes":[1,2]}',
+                    id: 'offline:theme',
+                    key: 'theme',
+                    type: 'json',
+                    value: '{"link":"https://example.com/café","sizes":[1,2]}',
                 ),
             ],
             $client->getAllConfigs(),
@@ -348,7 +413,12 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
 
         self::assertEquals(
-            ['theme' => new ConfigState('offline:theme', 'theme', 'json', '{"layout":{},"colors":{"accent":"blue"}}')],
+            ['theme' => new ConfigState(
+                id: 'offline:theme',
+                key: 'theme',
+                type: 'json',
+                value: '{"layout":{},"colors":{"accent":"blue"}}',
+            )],
             $client->getAllConfigs(),
         );
     }
@@ -399,8 +469,13 @@ final class ClientOfflineTest extends TestCase
 
         self::assertEquals(
             [
-                'theme' => new ConfigState('offline:theme', 'theme', 'json', '{}'),
-                'layout' => new ConfigState('offline:layout', 'layout', 'json', '{"columns":{},"rows":[]}'),
+                'theme' => new ConfigState(id: 'offline:theme', key: 'theme', type: 'json', value: '{}'),
+                'layout' => new ConfigState(
+                    id: 'offline:layout',
+                    key: 'layout',
+                    type: 'json',
+                    value: '{"columns":{},"rows":[]}',
+                ),
             ],
             $client->getAllConfigs(),
         );
@@ -431,7 +506,7 @@ final class ClientOfflineTest extends TestCase
         $client->initialize();
         file_put_contents($file, '{"new-checkout": true, "max-items": 30}');
         $updates = [];
-        $client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$updates): void {
+        $client->on('configsUpdated', static function (ConfigsUpdatedEvent $event) use (&$updates): void {
             $updates[] = [$event->keys, $event->removedKeys];
         });
 
@@ -508,7 +583,15 @@ final class ClientOfflineTest extends TestCase
 
         self::assertFalse($client->isReady());
         self::assertEquals(
-            new ConfigEvaluation('max-items', 10, null, null, true, EvaluationReason::ClientNotReady, null),
+            new ConfigEvaluation(
+                key: 'max-items',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ClientNotReady,
+                context: null,
+            ),
             $client->evaluate('max-items', 10),
         );
     }
@@ -562,6 +645,25 @@ final class ClientOfflineTest extends TestCase
         $this->expectException(ConfigDirectorInitializationException::class);
 
         $client->initialize();
+    }
+
+    public function testTheCauseOfAFileHoldingANullValueIsAConfigDirectorException(): void
+    {
+        $client = ConfigDirector::createClient(
+            connection: new ConnectionOptions(
+                mode: ConnectionMode::Offline,
+                file: $this->fileHolding('{"new-checkout": null}'),
+            ),
+            logger: new RecordingLogger(),
+        );
+
+        try {
+            $client->initialize();
+            self::fail('initialize() served a null value.');
+        } catch (ConfigDirectorInitializationException $unloadedFile) {
+        }
+
+        self::assertInstanceOf(ConfigDirectorException::class, $unloadedFile->getPrevious());
     }
 
     public function testAUrlGivenAsTheFileThrowsFromInitializeWithoutARequest(): void
@@ -669,13 +771,13 @@ final class ClientOfflineTest extends TestCase
             ),
             logger: new RecordingLogger(),
         );
-        $client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+        $client->on('configsUpdated', static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
             $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
         });
-        $client->watch('max-items', 0, function (int $value) use (&$deliveries): void {
+        $client->watch('max-items', 0, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch', $value];
         });
-        $client->on('clientReady', function () use (&$deliveries): void {
+        $client->on('clientReady', static function () use (&$deliveries): void {
             $deliveries[] = ['clientReady'];
         });
 
@@ -699,7 +801,7 @@ final class ClientOfflineTest extends TestCase
             connection: new ConnectionOptions(mode: ConnectionMode::Offline, file: $file),
             logger: new RecordingLogger(),
         );
-        $client->watch('new-checkout', false, function (bool $value) use (&$watchedValues): void {
+        $client->watch('new-checkout', false, static function (bool $value) use (&$watchedValues): void {
             $watchedValues[] = $value;
         });
         $client->initialize();

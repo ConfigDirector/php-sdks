@@ -15,6 +15,9 @@ use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
+/**
+ * @phpstan-import-type RecordedRequest from \ConfigDirector\Tests\Support\RecordedRequests
+ */
 final class ClientTrackTest extends TestCase
 {
     private string $storagePath;
@@ -627,7 +630,7 @@ final class ClientTrackTest extends TestCase
     }
 
     /**
-     * @return list<array{method: string, path: string, headers: array<string, string>, body: mixed, bodyText: string}>
+     * @return list<RecordedRequest>
      */
     private function telemetryRequestsReceived(): array
     {

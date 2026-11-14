@@ -15,12 +15,16 @@ final class LocalStore
     private bool $hasWarnedThatTelemetryWasNotKept = false;
 
     private function __construct(
-        private readonly ?string $usableFolder,
+        public readonly ?string $usableFolder,
         private readonly LoggerInterface $logger,
     ) {}
 
-    public static function ofServerSdkKey(string $serverSdkKey, ?string $storagePath, LoggerInterface $logger): self
-    {
+    public static function ofServerSdkKey(
+        #[\SensitiveParameter]
+        string $serverSdkKey,
+        ?string $storagePath,
+        LoggerInterface $logger,
+    ): self {
         $folder = StoreFolder::openedFor($serverSdkKey, $storagePath);
         if ($folder->refusal === null) {
             return new self($folder->path, $logger);
@@ -28,12 +32,7 @@ final class LocalStore
 
         $logger->error($folder->refusal->errorMessage(), ['folder' => $folder->path]);
 
-        return new self(null, $logger);
-    }
-
-    public function usableFolder(): ?string
-    {
-        return $this->usableFolder;
+        return new self(usableFolder: null, logger: $logger);
     }
 
     public function isHeldByAStreamingProcess(): bool

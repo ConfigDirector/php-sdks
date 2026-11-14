@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Value;
 
-enum InCodeDefaultValueType
+enum InCodeDefaultValueType: string
 {
-    case Boolean;
-    case String;
-    case Integer;
-    case Float;
-    case Array;
+    case Boolean = 'bool';
+    case String = 'string';
+    case Integer = 'int';
+    case Float = 'float';
+    case Array = 'array';
 }

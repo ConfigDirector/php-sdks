@@ -62,7 +62,11 @@ final class PollingTransport
         $filledStore = $this->store->storedPayloadFilledWithin(
             $this->timeoutMilliseconds,
             function (int $remainingMilliseconds, RefreshLock $refreshLock) use (&$pollAttempt): ?StoredPayload {
-                $pollAttempt = $this->pollAttemptedUnder($refreshLock, null, $remainingMilliseconds);
+                $pollAttempt = $this->pollAttemptedUnder(
+                    $refreshLock,
+                    storedPayload: null,
+                    timeLimitMilliseconds: $remainingMilliseconds,
+                );
 
                 return $pollAttempt->freshPayload;
             },
@@ -134,7 +138,7 @@ final class PollingTransport
             return null;
         }
 
-        $refreshLock = $this->store->refreshLockAcquiredWithin(0);
+        $refreshLock = $this->store->refreshLockAcquiredWithin(timeoutMilliseconds: 0);
         if ($refreshLock === null) {
             $this->expectTheNextPollAt($this->clock->epochMilliseconds() + $this->pollingInterval->milliseconds());
 
@@ -205,11 +209,11 @@ final class PollingTransport
             ?? $this->store->pollingPause($this->endpoint->url)->sessionId
             ?? SessionId::newlyGenerated();
         $pauseWhileThePollIsUnanswered = new PollingPause(
-            $sessionId,
-            $now,
-            $now + $pollingIntervalMilliseconds,
-            false,
-            null,
+            sessionId: $sessionId,
+            recordedAtEpochMilliseconds: $now,
+            untilEpochMilliseconds: $now + $pollingIntervalMilliseconds,
+            pollFailed: false,
+            refusalStatus: null,
         );
         if (!$refreshLock->recordPollingPause($this->endpoint->url, $pauseWhileThePollIsUnanswered)) {
             return PollAttempt::unsent(
@@ -226,11 +230,11 @@ final class PollingTransport
         );
         $answeredAt = $this->clock->epochMilliseconds();
         $pauseAfterTheFailedPollOf = static fn(int $pauseMilliseconds): PollingPause => new PollingPause(
-            $sessionId,
-            $answeredAt,
-            $answeredAt + $pauseMilliseconds,
-            true,
-            $answer->status,
+            sessionId: $sessionId,
+            recordedAtEpochMilliseconds: $answeredAt,
+            untilEpochMilliseconds: $answeredAt + $pauseMilliseconds,
+            pollFailed: true,
+            refusalStatus: $answer->status,
         );
 
         return match ($answer->kind) {
@@ -351,10 +355,6 @@ final class PollingTransport
 
     private static function retryAfterMillisecondsOf(PollAnswer $answer, int $nowEpochMilliseconds): int
     {
-        $retryAfterSeconds = $answer->retryAfterHeader === null
-            ? null
-            : RetryAfterHeader::secondsNamedBy($answer->retryAfterHeader, $nowEpochMilliseconds);
-
-        return ($retryAfterSeconds ?? 0) * 1_000;
+        return ($answer->retryAfterHeader?->secondsToWaitFrom($nowEpochMilliseconds) ?? 0) * 1_000;
     }
 }

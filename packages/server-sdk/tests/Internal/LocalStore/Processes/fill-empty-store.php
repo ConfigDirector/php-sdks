@@ -22,7 +22,7 @@ while (!file_exists($startingGateFolder . DIRECTORY_SEPARATOR . 'go')) {
 $hasFetched = false;
 $storedPayload = $store->storedPayloadFilledWithin(
     10_000,
-    function () use (&$hasFetched, $processName): StoredPayload {
+    static function () use (&$hasFetched, $processName): StoredPayload {
         $hasFetched = true;
         usleep(200_000);
 

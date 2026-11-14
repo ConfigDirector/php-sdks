@@ -17,7 +17,7 @@ final class StreamAnswer
 
     private ?int $statusOfTheAnswer = null;
 
-    private ?string $retryAfterHeader = null;
+    private ?RetryAfterHeader $retryAfterHeader = null;
 
     private string $refusalBody = '';
 
@@ -76,16 +76,14 @@ final class StreamAnswer
 
     private function millisecondsNamedByRetryAfter(int $nowEpochMilliseconds): ?int
     {
-        $seconds = $this->retryAfterHeader === null
-            ? null
-            : RetryAfterHeader::secondsNamedBy($this->retryAfterHeader, $nowEpochMilliseconds);
+        $seconds = $this->retryAfterHeader?->secondsToWaitFrom($nowEpochMilliseconds);
 
         return $seconds === null ? null : max(0, $seconds) * 1_000;
     }
 
     public function takeInHeaderLine(\CurlHandle $request, string $headerLine): int
     {
-        $this->retryAfterHeader = RetryAfterHeader::valueIn($headerLine) ?? $this->retryAfterHeader;
+        $this->retryAfterHeader = RetryAfterHeader::in($headerLine) ?? $this->retryAfterHeader;
         if (trim($headerLine) === '') {
             $status = curl_getinfo($request, CURLINFO_RESPONSE_CODE);
             $isTheFinalAnswer = $status >= 200;

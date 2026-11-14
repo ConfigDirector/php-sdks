@@ -6,16 +6,16 @@ namespace ConfigDirector\Internal\LocalStore;
 
 use Psr\Log\LoggerInterface;
 
-final class RefreshLock
+final readonly class RefreshLock
 {
     private const string UNWRITABLE_FILE_MESSAGE = '[LocalStore] {file} could not be written or locked, so the local '
         . 'store keeps the values it had.';
 
     private function __construct(
-        private readonly ExclusiveFileLock $fileLock,
-        private readonly string $storeFolder,
-        private readonly PayloadFile $payloadFile,
-        private readonly LoggerInterface $logger,
+        private ExclusiveFileLock $fileLock,
+        private string $storeFolder,
+        private PayloadFile $payloadFile,
+        private LoggerInterface $logger,
     ) {}
 
     public static function acquiredWithin(

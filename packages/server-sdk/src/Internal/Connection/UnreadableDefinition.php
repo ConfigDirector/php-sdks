@@ -4,4 +4,6 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Connection;
 
-final class UnreadableDefinition extends \RuntimeException {}
+use ConfigDirector\ConfigDirectorException;
+
+final class UnreadableDefinition extends ConfigDirectorException {}

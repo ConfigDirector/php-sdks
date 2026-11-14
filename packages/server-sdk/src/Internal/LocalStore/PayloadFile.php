@@ -25,7 +25,7 @@ final readonly class PayloadFile
         }
 
         $json = $this->file->contentsOfAtMost(self::MAXIMUM_BYTES);
-        if ($json === false) {
+        if ($json === null) {
             return AbsentPayload::FileUnreadable;
         }
 

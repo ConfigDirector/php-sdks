@@ -49,15 +49,11 @@ final class ReportedValue
             return $jsonText === false ? 'null' : $jsonText;
         }
 
-        $memberTexts = [];
         if (array_is_list($value)) {
-            foreach ($value as $member) {
-                $memberTexts[] = self::jsonTextOf($member);
-            }
-
-            return '[' . implode(',', $memberTexts) . ']';
+            return '[' . implode(',', array_map(self::jsonTextOf(...), $value)) . ']';
         }
 
+        $memberTexts = [];
         foreach ($value as $name => $member) {
             $memberTexts[] = self::jsonTextOf((string) $name) . ':' . self::jsonTextOf($member);
         }
@@ -67,10 +63,10 @@ final class ReportedValue
 
     private static function isShortEnoughToReportAsText(string $text): bool
     {
-        $isUtf8TextWithinTheLimit = preg_match('/^.{0,' . self::MAXIMUM_CHARACTERS_REPORTED_AS_TEXT . '}\z/su', $text);
-
-        return $isUtf8TextWithinTheLimit === false
-            ? strlen($text) <= self::MAXIMUM_CHARACTERS_REPORTED_AS_TEXT
-            : $isUtf8TextWithinTheLimit === 1;
+        return match (preg_match('/^.{0,' . self::MAXIMUM_CHARACTERS_REPORTED_AS_TEXT . '}\z/su', $text)) {
+            1 => true,
+            0 => false,
+            false => strlen($text) <= self::MAXIMUM_CHARACTERS_REPORTED_AS_TEXT,
+        };
     }
 }

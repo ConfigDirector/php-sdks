@@ -81,13 +81,9 @@ final readonly class TypedValue
 
     private static function arrayFrom(string $servedText): self|EvaluationReason
     {
-        try {
-            $decoded = json_decode($servedText, true, flags: JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return EvaluationReason::InvalidJson;
-        }
+        $jsonValue = json_decode($servedText, associative: true);
 
-        return is_array($decoded) ? new self($decoded) : EvaluationReason::InvalidJson;
+        return is_array($jsonValue) ? new self($jsonValue) : EvaluationReason::InvalidJson;
     }
 
     private static function finiteNumberFrom(string $servedText): int|float|null

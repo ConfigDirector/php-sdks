@@ -7,7 +7,6 @@ namespace ConfigDirector\Internal\Telemetry;
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigState;
 use ConfigDirector\Internal\Value\InCodeDefaultValue;
-use ConfigDirector\Internal\Value\InCodeDefaultValueType;
 
 final class ReportedEvaluation
 {
@@ -37,14 +36,12 @@ final class ReportedEvaluation
                     'contextKind' => $reportedContext?->kind,
                     'key' => $evaluation->key,
                     'type' => $configType,
-                    'defaultValue' => ReportedValue::of($inCodeDefaultValue->value, $configType, null),
-                    'requestedType' => match ($inCodeDefaultValue->type) {
-                        InCodeDefaultValueType::Boolean => 'bool',
-                        InCodeDefaultValueType::String => 'string',
-                        InCodeDefaultValueType::Integer => 'int',
-                        InCodeDefaultValueType::Float => 'float',
-                        InCodeDefaultValueType::Array => 'array',
-                    },
+                    'defaultValue' => ReportedValue::of(
+                        $inCodeDefaultValue->value,
+                        $configType,
+                        valueIdSentWithTheValue: null,
+                    ),
+                    'requestedType' => $inCodeDefaultValue->type->value,
                     'evaluatedValue' => ReportedValue::of($evaluation->value, $configType, $evaluation->valueId),
                     'evaluatedValueId' => $evaluation->valueId,
                     'usedDefault' => $evaluation->isDefaultValue,

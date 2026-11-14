@@ -46,12 +46,11 @@ final class StreamingTransport
     private bool $hasStoredAPayloadOfTheOpenStream = false;
 
     /**
-     * @param \Closure(array<array-key, mixed> $payload): bool $storePayloadReceived
      * @param \Closure(): float $randomFraction
      */
     public function __construct(
         private readonly StreamEndpoint $endpoint,
-        private readonly \Closure $storePayloadReceived,
+        private readonly LocalStoreFedByTheStream $localStoreFedByTheStream,
         private readonly Clock $clock,
         private readonly \Closure $randomFraction,
         private readonly LoggerInterface $logger,
@@ -146,7 +145,7 @@ final class StreamingTransport
                 continue;
             }
 
-            if (($this->storePayloadReceived)($payload)) {
+            if ($this->localStoreFedByTheStream->storePayloadReceived($payload)) {
                 $this->hasStoredAPayloadOfTheOpenStream = true;
 
                 continue;
@@ -157,7 +156,6 @@ final class StreamingTransport
                 . 'Reconnecting to receive them again.',
             );
             $this->endTheStream($connection, StreamEnd::payloadNotStored());
-            $this->lastEventId = '';
 
             return;
         }
@@ -220,7 +218,14 @@ final class StreamingTransport
      */
     private function endTheStream(StreamConnection $connection, StreamEnd $streamEnd): void
     {
-        $this->lastEventId = $connection->answer->lastEventId();
+        $this->lastEventId = match ($streamEnd->kind) {
+            StreamEndKind::PayloadNotStored => '',
+            StreamEndKind::Unreachable,
+            StreamEndKind::Throttled,
+            StreamEndKind::RefusedUnrecoverably,
+            StreamEndKind::Refused,
+            StreamEndKind::Dropped => $connection->answer->lastEventId(),
+        };
         $this->closeTheStreamOf($connection);
         $this->logger->debug('[StreamingTransport] Disconnected', ['cause' => $streamEnd->cause]);
 

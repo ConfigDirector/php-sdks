@@ -28,7 +28,7 @@ final readonly class Segment
     private static function everyConditionHolds(array $conditionGroup, EvaluationContext $context): bool
     {
         foreach ($conditionGroup as $condition) {
-            if (!$condition->holdsFor($context, [])) {
+            if (!$condition->holdsFor($context, segments: [])) {
                 return false;
             }
         }

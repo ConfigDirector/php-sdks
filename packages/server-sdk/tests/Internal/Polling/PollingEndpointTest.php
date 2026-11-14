@@ -30,7 +30,7 @@ final class PollingEndpointTest extends TestCase
         ]);
         $endpoint = self::endpointOf($this->server->url);
 
-        $answer = $endpoint->answerToAPoll('session-1', null, 300);
+        $answer = $endpoint->answerToAPoll('session-1', lastUpdateTimestamp: null, timeLimitMilliseconds: 300);
 
         self::assertSame(PollAnswerKind::TimedOut, $answer->kind);
     }
@@ -40,7 +40,7 @@ final class PollingEndpointTest extends TestCase
         $this->server = ScriptedSdkServer::answering([['closes' => 'before-answering']]);
         $endpoint = self::endpointOf($this->server->url);
 
-        $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
+        $answer = $endpoint->answerToAPoll('session-1', lastUpdateTimestamp: null, timeLimitMilliseconds: 3_000);
 
         self::assertSame(PollAnswerKind::Unanswered, $answer->kind);
     }
@@ -53,7 +53,7 @@ final class PollingEndpointTest extends TestCase
         $this->server = null;
         $endpoint = self::endpointOf($urlNothingListensOn);
 
-        $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
+        $answer = $endpoint->answerToAPoll('session-1', lastUpdateTimestamp: null, timeLimitMilliseconds: 3_000);
 
         self::assertSame(PollAnswerKind::Unanswered, $answer->kind);
     }
@@ -62,7 +62,7 @@ final class PollingEndpointTest extends TestCase
     {
         $endpoint = self::endpointOf('http://sdk-server.invalid');
 
-        $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
+        $answer = $endpoint->answerToAPoll('session-1', lastUpdateTimestamp: null, timeLimitMilliseconds: 3_000);
 
         self::assertSame(PollAnswerKind::Unanswered, $answer->kind);
     }
@@ -74,7 +74,7 @@ final class PollingEndpointTest extends TestCase
         $this->server = ScriptedSdkServer::answeringOverTlsWithASelfSignedCertificate([['status' => 204]]);
         $endpoint = self::endpointOf($this->server->url);
 
-        $answer = $endpoint->answerToAPoll('session-1', null, 3_000);
+        $answer = $endpoint->answerToAPoll('session-1', lastUpdateTimestamp: null, timeLimitMilliseconds: 3_000);
 
         self::assertSame(PollAnswerKind::Unanswered, $answer->kind);
         self::assertSame([], $this->server->requestsReceived());
@@ -85,7 +85,7 @@ final class PollingEndpointTest extends TestCase
         $this->server = ScriptedSdkServer::answering([['status' => 204]]);
         $endpoint = self::endpointOf($this->server->url . '/configdirector/');
 
-        $endpoint->answerToAPoll('session-1', null, 3_000);
+        $endpoint->answerToAPoll('session-1', lastUpdateTimestamp: null, timeLimitMilliseconds: 3_000);
 
         self::assertSame('/configdirector/server/polling/v1', $this->server->requestsReceived()[0]['path']);
     }

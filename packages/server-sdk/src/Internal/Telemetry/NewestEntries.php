@@ -13,7 +13,7 @@ final class NewestEntries
     private array $entriesByKey = [];
 
     /** @var \SplQueue<string> */
-    private \SplQueue $keysOldestFirst;
+    private readonly \SplQueue $keysOldestFirst;
 
     public function __construct(private readonly int $limit)
     {

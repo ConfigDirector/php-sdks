@@ -116,7 +116,10 @@ final class PollingTransportTest extends TestCase
     public function testAPollCarriesTheServerSdkKeyTheSdkNameAndVersionAndTheApplicationMetadata(): void
     {
         $server = $this->serverAnswering([['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]]]);
-        $transport = $this->transportPolling($server, metadata: new Metadata('checkout-api', '4.2.0'));
+        $transport = $this->transportPolling($server, metadata: new Metadata(
+            appName: 'checkout-api',
+            appVersion: '4.2.0',
+        ));
 
         $transport->storedPayloadForInitialization();
 
@@ -1230,11 +1233,11 @@ final class PollingTransportTest extends TestCase
         $refreshLock->recordPollingPause(
             $server->url . '/server/polling/v1',
             new PollingPause(
-                'session-1',
-                self::NOVEMBER_12_2026_AT_NOON,
-                self::NOVEMBER_12_2026_AT_NOON + 60_000,
-                false,
-                null,
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON,
+                untilEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON + 60_000,
+                pollFailed: false,
+                refusalStatus: null,
             ),
         );
         $refreshLock->release();
@@ -1355,15 +1358,20 @@ final class PollingTransportTest extends TestCase
         $regularFile = $this->storagePath . DIRECTORY_SEPARATOR . 'regular-file';
         touch($regularFile);
         $transport = new PollingTransport(
-            LocalStore::ofServerSdkKey('server-sdk-key', $regularFile, $this->logger),
-            new PollingEndpoint($server->url, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
-            PollingInterval::ofConfiguredSeconds(60),
-            3_000,
-            new ClientLifetime($this->clock, 30_000),
-            $this->clock,
-            $this->logger,
-            static function (): void {},
-            static function (): void {},
+            store: LocalStore::ofServerSdkKey('server-sdk-key', $regularFile, $this->logger),
+            endpoint: new PollingEndpoint(
+                $server->url,
+                'server-sdk-key',
+                new Metadata(),
+                SdkIdentity::ofTheServerSdk(),
+            ),
+            pollingInterval: PollingInterval::ofConfiguredSeconds(60),
+            timeoutMilliseconds: 3_000,
+            clientLifetime: new ClientLifetime($this->clock, 30_000),
+            clock: $this->clock,
+            logger: $this->logger,
+            reportUnrecoverableError: static function (): void {},
+            reportPayloadReceivedByAPoll: static function (): void {},
         );
 
         $storedPayload = $transport->storedPayloadForInitialization();
@@ -1555,11 +1563,11 @@ final class PollingTransportTest extends TestCase
 
         self::assertEquals(
             new PollingPause(
-                $this->sessionIdOfTheFirstPollReceivedBy($server),
-                self::NOVEMBER_12_2026_AT_NOON,
-                self::NOVEMBER_12_2026_AT_NOON + 60_000,
-                true,
-                null,
+                sessionId: $this->sessionIdOfTheFirstPollReceivedBy($server),
+                recordedAtEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON,
+                untilEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON + 60_000,
+                pollFailed: true,
+                refusalStatus: null,
             ),
             $this->pollingPauseOf($server),
         );
@@ -1618,11 +1626,11 @@ final class PollingTransportTest extends TestCase
         $refreshLock->recordPollingPause(
             $server->url . '/server/polling/v1',
             new PollingPause(
-                'session-1',
-                self::NOVEMBER_12_2026_AT_NOON,
-                self::NOVEMBER_12_2026_AT_NOON + 60_000,
-                false,
-                null,
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON,
+                untilEpochMilliseconds: self::NOVEMBER_12_2026_AT_NOON + 60_000,
+                pollFailed: false,
+                refusalStatus: null,
             ),
         );
         $refreshLock->release();
@@ -1695,25 +1703,25 @@ final class PollingTransportTest extends TestCase
         ?Metadata $metadata = null,
     ): PollingTransport {
         return new PollingTransport(
-            $this->storeOpenedAgain(),
-            new PollingEndpoint(
+            store: $this->storeOpenedAgain(),
+            endpoint: new PollingEndpoint(
                 $server->url,
                 'server-sdk-key',
                 $metadata ?? new Metadata(),
                 SdkIdentity::ofTheServerSdk(),
             ),
-            PollingInterval::ofConfiguredSeconds($configuredIntervalSeconds),
-            $timeoutMilliseconds,
-            new ClientLifetime($this->clock, $flushIntervalMilliseconds),
-            $this->clock,
-            $this->logger,
-            function (ConfigDirectorConnectionException $error): void {
+            pollingInterval: PollingInterval::ofConfiguredSeconds($configuredIntervalSeconds),
+            timeoutMilliseconds: $timeoutMilliseconds,
+            clientLifetime: new ClientLifetime($this->clock, $flushIntervalMilliseconds),
+            clock: $this->clock,
+            logger: $this->logger,
+            reportUnrecoverableError: function (ConfigDirectorConnectionException $error): void {
                 $this->unrecoverableErrorsReported[] = $error;
                 $refreshLock = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
                 $this->refreshLockWasFreeWhileReporting[] = $refreshLock !== null;
                 $refreshLock?->release();
             },
-            function (StoredPayload $payloadReceived): void {
+            reportPayloadReceivedByAPoll: function (StoredPayload $payloadReceived): void {
                 $this->payloadsReportedAfterAPoll[] = $payloadReceived->payload;
                 $refreshLock = $this->storeOpenedAgain()->refreshLockAcquiredWithin(0);
                 $this->refreshLockWasFreeWhileReportingAPayload[] = $refreshLock !== null;
@@ -1725,11 +1733,11 @@ final class PollingTransportTest extends TestCase
     /**
      * @return array<array-key, mixed>
      */
-    private static function payloadOf(StoredPayload|UndeliveredPayload $delivered): array
+    private static function payloadOf(StoredPayload|UndeliveredPayload $payloadForInitialization): array
     {
-        self::assertInstanceOf(StoredPayload::class, $delivered);
+        self::assertInstanceOf(StoredPayload::class, $payloadForInitialization);
 
-        return $delivered->payload;
+        return $payloadForInitialization->payload;
     }
 
     private static function sessionIdOf(StoredPayload|UndeliveredPayload $delivered): string

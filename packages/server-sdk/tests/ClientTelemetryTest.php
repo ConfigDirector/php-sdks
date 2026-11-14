@@ -21,6 +21,7 @@ use Psr\Log\LogLevel;
 
 /**
  * @phpstan-import-type ScriptedAnswer from ScriptedSdkServer
+ * @phpstan-import-type RecordedRequest from \ConfigDirector\Tests\Support\RecordedRequests
  */
 final class ClientTelemetryTest extends TestCase
 {
@@ -1428,7 +1429,7 @@ final class ClientTelemetryTest extends TestCase
 
     private function endARequestAfterTheFlushInterval(?Metadata $metadata = null, int $eventQueueLimit = 5_000): void
     {
-        $client = $this->client(1, $metadata, $eventQueueLimit);
+        $client = $this->client(flushInterval: 1, metadata: $metadata, eventQueueLimit: $eventQueueLimit);
         $client->initialize();
         self::letTheStoredTelemetryAgePastOneMillisecond();
 
@@ -1449,7 +1450,7 @@ final class ClientTelemetryTest extends TestCase
     }
 
     /**
-     * @return list<array{method: string, path: string, headers: array<string, string>, body: mixed}>
+     * @return list<RecordedRequest>
      */
     private function telemetryRequestsReceived(): array
     {

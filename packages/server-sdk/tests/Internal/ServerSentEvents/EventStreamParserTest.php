@@ -11,9 +11,9 @@ use PHPUnit\Framework\TestCase;
 
 final class EventStreamParserTest extends TestCase
 {
-    private const int ONE_MIB = 1_048_576;
+    private const int ONE_MEBIBYTE = 1_048_576;
 
-    private const int SIXTEEN_MIB = 16_777_216;
+    private const int SIXTEEN_MEBIBYTES = 16_777_216;
 
     public function testTheDataLinesOfAnEventAreJoinedWithNewlines(): void
     {
@@ -261,30 +261,30 @@ final class EventStreamParserTest extends TestCase
         self::assertEquals([new ServerSentEvent('', 'complete')], $events);
     }
 
-    public function testALineOfOneMibPlusOneByteEndsTheStream(): void
+    public function testALineOfOneMebibytePlusOneByteEndsTheStream(): void
     {
         $parser = self::parserDiscardingEvents();
 
         $this->expectException(EventStreamLimitExceeded::class);
 
-        $parser->feed(self::dataLineOfBytes(self::ONE_MIB + 1) . "\n\n");
+        $parser->feed(self::dataLineOfBytes(self::ONE_MEBIBYTE + 1) . "\n\n");
     }
 
-    public function testALineOfExactlyOneMibIsRead(): void
+    public function testALineOfExactlyOneMebibyteIsRead(): void
     {
         $events = [];
         $parser = self::parserCollectingInto($events);
 
-        $parser->feed(self::dataLineOfBytes(self::ONE_MIB) . "\n\n");
+        $parser->feed(self::dataLineOfBytes(self::ONE_MEBIBYTE) . "\n\n");
 
         self::assertCount(1, $events);
         self::assertSame(1_048_570, strlen($events[0]->data));
     }
 
-    public function testALineThatNeverEndsEndsTheStreamOnceItHoldsMoreThanOneMib(): void
+    public function testALineThatNeverEndsEndsTheStreamOnceItHoldsMoreThanOneMebibyte(): void
     {
         $parser = self::parserDiscardingEvents();
-        $parser->feed(str_repeat('x', self::ONE_MIB));
+        $parser->feed(str_repeat('x', self::ONE_MEBIBYTE));
 
         $this->expectException(EventStreamLimitExceeded::class);
 
@@ -298,7 +298,7 @@ final class EventStreamParserTest extends TestCase
 
         $limitExceeded = null;
         try {
-            $parser->feed("data: complete\n\n" . self::dataLineOfBytes(self::ONE_MIB + 1) . "\n\n");
+            $parser->feed("data: complete\n\n" . self::dataLineOfBytes(self::ONE_MEBIBYTE + 1) . "\n\n");
         } catch (EventStreamLimitExceeded $exception) {
             $limitExceeded = $exception;
         }
@@ -307,29 +307,29 @@ final class EventStreamParserTest extends TestCase
         self::assertEquals([new ServerSentEvent('', 'complete')], $events);
     }
 
-    public function testAnEventOfSixteenMibPlusOneByteEndsTheStream(): void
+    public function testAnEventOfSixteenMebibytesPlusOneByteEndsTheStream(): void
     {
         $parser = self::parserDiscardingEvents();
 
         $this->expectException(EventStreamLimitExceeded::class);
 
-        $parser->feed(self::dataLinesHoldingBytes(self::SIXTEEN_MIB + 1) . "\n");
+        $parser->feed(self::dataLinesHoldingBytes(self::SIXTEEN_MEBIBYTES + 1) . "\n");
     }
 
-    public function testAnEventOfExactlySixteenMibIsRead(): void
+    public function testAnEventOfExactlySixteenMebibytesIsRead(): void
     {
         $events = [];
         $parser = self::parserCollectingInto($events);
 
-        $parser->feed(self::dataLinesHoldingBytes(self::SIXTEEN_MIB) . "\n");
+        $parser->feed(self::dataLinesHoldingBytes(self::SIXTEEN_MEBIBYTES) . "\n");
 
         self::assertCount(1, $events);
-        self::assertSame(self::SIXTEEN_MIB, strlen($events[0]->data));
+        self::assertSame(self::SIXTEEN_MEBIBYTES, strlen($events[0]->data));
     }
 
     private static function dataLinesHoldingBytes(int $dataBytes): string
     {
-        $longestValueOfALine = self::ONE_MIB - strlen('data: ');
+        $longestValueOfALine = self::ONE_MEBIBYTE - strlen('data: ');
         $lines = [];
         $bytesLeft = $dataBytes;
         while ($bytesLeft > $longestValueOfALine) {

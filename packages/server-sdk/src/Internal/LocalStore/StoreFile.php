@@ -30,13 +30,13 @@ final readonly class StoreFile
     /**
      * @param int<0, max> $maximumBytes
      */
-    public function contentsOfAtMost(int $maximumBytes): string|false
+    public function contentsOfAtMost(int $maximumBytes): ?string
     {
         $contents = self::attemptedAgainOnWindows(
             fn(): string|false => file_get_contents($this->path, length: $maximumBytes + 1),
         );
 
-        return $contents === false || strlen($contents) > $maximumBytes ? false : $contents;
+        return $contents === false || strlen($contents) > $maximumBytes ? null : $contents;
     }
 
     public function replaceContentsWith(string $contents): bool
@@ -71,11 +71,11 @@ final readonly class StoreFile
     }
 
     /**
-     * @template TResult
+     * @template TOutcome
      *
-     * @param \Closure(): (TResult|false) $filesystemCall
+     * @param \Closure(): (TOutcome|false) $filesystemCall
      *
-     * @return TResult|false
+     * @return TOutcome|false
      */
     private static function attemptedAgainOnWindows(\Closure $filesystemCall): mixed
     {
@@ -83,9 +83,9 @@ final readonly class StoreFile
             ? self::ATTEMPTS_ON_WINDOWS_WHILE_ANOTHER_PROCESS_HAS_THE_FILE_OPEN
             : 1;
         for ($attempt = 1; ; $attempt++) {
-            $result = SilencedWarnings::during($filesystemCall);
-            if ($result !== false || $attempt >= $attemptsAllowed) {
-                return $result;
+            $outcome = SilencedWarnings::during($filesystemCall);
+            if ($outcome !== false || $attempt >= $attemptsAllowed) {
+                return $outcome;
             }
 
             usleep(self::PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS);

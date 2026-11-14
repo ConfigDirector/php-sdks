@@ -14,9 +14,11 @@ use ConfigDirector\ConnectionErrorEvent;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\EvaluationReason;
 use ConfigDirector\Metadata;
+use ConfigDirector\Tests\Support\FailingLogger;
 use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\ScriptedSdkServer;
+use ConfigDirector\Tests\Support\StackTraceArguments;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use ConfigDirector\Version;
 use PHPUnit\Framework\TestCase;
@@ -124,10 +126,10 @@ final class ClientInitializationTest extends TestCase
         ]);
         $client = $this->clientPolling($server, new RecordingLogger());
         $eventsFired = [];
-        $client->on('configsUpdated', function (ConfigsUpdatedEvent $update) use (&$eventsFired): void {
+        $client->on('configsUpdated', static function (ConfigsUpdatedEvent $update) use (&$eventsFired): void {
             $eventsFired[] = $update;
         });
-        $client->on('clientReady', function () use (&$eventsFired): void {
+        $client->on('clientReady', static function () use (&$eventsFired): void {
             $eventsFired[] = 'clientReady';
         });
 
@@ -158,7 +160,15 @@ final class ClientInitializationTest extends TestCase
 
         self::assertFalse($client->isReady());
         self::assertEquals(
-            new ConfigEvaluation('page-size', 10, null, null, true, EvaluationReason::ClientNotReady, null),
+            new ConfigEvaluation(
+                key: 'page-size',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ClientNotReady,
+                context: null,
+            ),
             $client->evaluate('page-size', 10),
         );
     }
@@ -247,17 +257,37 @@ final class ClientInitializationTest extends TestCase
         self::assertFalse($client->isReady());
     }
 
+    public function testALoggerThatThrowsOnAStoragePathThatCannotBeUsedKeepsTheServerSdkKeyOutOfTheStackTrace(): void
+    {
+        $server = $this->serverAnswering([['status' => 200, 'body' => self::PAYLOAD_OF_ONE_CONFIG]]);
+        $regularFile = $this->storagePath . DIRECTORY_SEPARATOR . 'regular-file';
+        touch($regularFile);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key-to-keep-secret',
+            connection: new ConnectionOptions(url: $server->url, storagePath: $regularFile),
+            logger: new FailingLogger(),
+        );
+
+        try {
+            $client->initialize();
+            self::fail('initialize() logged no error about the storage path.');
+        } catch (\RuntimeException $loggerFailure) {
+        }
+
+        self::assertSame([], StackTraceArguments::holding('server-sdk-key-to-keep-secret', $loggerFailure));
+    }
+
     public function testAPollRefusedWithA401FiresConnectionErrorWithTheStatus(): void
     {
         $server = $this->serverAnswering([['status' => 401, 'body' => 'Unauthorized']]);
-        $statusesOfConnectionErrors = [];
+        $connectionErrorStatuses = [];
         $client = ConfigDirector::createClient(
             serverSdkKey: 'server-sdk-key',
             connection: new ConnectionOptions(url: $server->url, storagePath: $this->storagePath),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(
-                connectionError: function (ConnectionErrorEvent $event) use (&$statusesOfConnectionErrors): void {
-                    $statusesOfConnectionErrors[] = $event->error instanceof ConfigDirectorConnectionException
+                connectionError: static function (ConnectionErrorEvent $event) use (&$connectionErrorStatuses): void {
+                    $connectionErrorStatuses[] = $event->error instanceof ConfigDirectorConnectionException
                         ? $event->error->status
                         : null;
                 },
@@ -266,7 +296,7 @@ final class ClientInitializationTest extends TestCase
 
         $client->initialize();
 
-        self::assertSame([401], $statusesOfConnectionErrors);
+        self::assertSame([401], $connectionErrorStatuses);
     }
 
     public function testAPollRefusedWithA503FiresNoConnectionError(): void
@@ -274,7 +304,7 @@ final class ClientInitializationTest extends TestCase
         $server = $this->serverAnswering([['status' => 503]]);
         $connectionErrors = 0;
         $client = $this->clientPolling($server, new RecordingLogger());
-        $client->on('connectionError', function () use (&$connectionErrors): void {
+        $client->on('connectionError', static function () use (&$connectionErrors): void {
             $connectionErrors++;
         });
 

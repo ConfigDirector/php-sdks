@@ -33,7 +33,7 @@ final readonly class EventReporter
     public function send(StoredTelemetry $storedTelemetry, LocalStore $store): void
     {
         $now = $this->clock->epochMilliseconds();
-        $report = new CollectedTelemetry($this->eventQueueLimit, $now);
+        $report = new CollectedTelemetry($this->eventQueueLimit, collectingSinceEpochMilliseconds: $now);
         foreach ($storedTelemetry->telemetryFileLines as $telemetryFileLine) {
             $report->addTelemetryOfTheFileLine($telemetryFileLine);
         }
@@ -91,7 +91,11 @@ final readonly class EventReporter
             $now = $this->clock->epochMilliseconds();
             $telemetryLock->recordSendingPause(
                 $this->endpoint->url,
-                new TelemetrySendingPause($now, $now + self::ONE_HOUR_MILLISECONDS, $refusal->status),
+                new TelemetrySendingPause(
+                    recordedAtEpochMilliseconds: $now,
+                    untilEpochMilliseconds: $now + self::ONE_HOUR_MILLISECONDS,
+                    refusalStatus: $refusal->status,
+                ),
             );
             $telemetryLock->discardStoredTelemetry();
         });

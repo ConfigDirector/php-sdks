@@ -28,8 +28,11 @@ final class OptionRules
         return LineLogger::writingToStandardErrorFrom($logLevel) ?? self::rejectLogLevel($logLevel);
     }
 
-    public static function nonBlankServerSdkKey(?string $serverSdkKey, string $whatCannotBeCreatedWithoutIt): string
-    {
+    public static function nonBlankServerSdkKey(
+        #[\SensitiveParameter]
+        ?string $serverSdkKey,
+        string $whatCannotBeCreatedWithoutIt,
+    ): string {
         if ($serverSdkKey === null || trim($serverSdkKey) === '') {
             throw new ConfigDirectorValidationException(
                 "No server SDK key was provided, {$whatCannotBeCreatedWithoutIt} without a valid server SDK key",
@@ -69,21 +72,21 @@ final class OptionRules
         );
     }
 
-    public static function rejectUnusableTelemetry(TelemetryOptions $telemetry): void
+    public static function rejectUnusableTelemetry(TelemetryOptions $telemetryOptions): void
     {
-        $eventQueueLimitIsInRange = $telemetry->eventQueueLimit >= self::MINIMUM_EVENT_QUEUE_LIMIT
-            && $telemetry->eventQueueLimit <= self::MAXIMUM_EVENT_QUEUE_LIMIT;
+        $eventQueueLimitIsInRange = $telemetryOptions->eventQueueLimit >= self::MINIMUM_EVENT_QUEUE_LIMIT
+            && $telemetryOptions->eventQueueLimit <= self::MAXIMUM_EVENT_QUEUE_LIMIT;
         if (!$eventQueueLimitIsInRange) {
             throw new ConfigDirectorValidationException(sprintf(
                 "Invalid telemetry event queue limit '%d'. It must be between %d and %d.",
-                $telemetry->eventQueueLimit,
+                $telemetryOptions->eventQueueLimit,
                 self::MINIMUM_EVENT_QUEUE_LIMIT,
                 self::MAXIMUM_EVENT_QUEUE_LIMIT,
             ));
         }
-        if ($telemetry->flushInterval <= 0) {
+        if ($telemetryOptions->flushInterval <= 0) {
             throw new ConfigDirectorValidationException(
-                "Invalid telemetry flush interval '{$telemetry->flushInterval}'. "
+                "Invalid telemetry flush interval '{$telemetryOptions->flushInterval}'. "
                 . 'It must be a positive number of milliseconds.',
             );
         }

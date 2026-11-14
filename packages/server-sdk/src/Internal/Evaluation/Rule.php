@@ -76,7 +76,13 @@ final readonly class Rule
             return FallThrough::NotMatched;
         }
 
-        return new ServedValue($this->value, $this->valueId, $this->variationId, null, ServedBy::MatchingRule);
+        return new ServedValue(
+            value: $this->value,
+            valueId: $this->valueId,
+            variationId: $this->variationId,
+            rolloutShare: null,
+            servedBy: ServedBy::MatchingRule,
+        );
     }
 
     private function serveFromRollout(string $configId, EvaluationContext $context): ServedValue|FallThrough
@@ -95,11 +101,11 @@ final readonly class Rule
         }
 
         return new ServedValue(
-            $share->value,
-            $share->valueId,
-            $share->variationId,
-            new RolloutShare($this->id, $share->id),
-            ServedBy::MatchingRule,
+            value: $share->value,
+            valueId: $share->valueId,
+            variationId: $share->variationId,
+            rolloutShare: new RolloutShare(ruleId: $this->id, shareId: $share->id),
+            servedBy: ServedBy::MatchingRule,
         );
     }
 

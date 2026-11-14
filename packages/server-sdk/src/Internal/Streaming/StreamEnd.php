@@ -26,17 +26,21 @@ final readonly class StreamEnd
             $status === self::TOO_MANY_REQUESTS_STATUS => new self(
                 StreamEndKind::Throttled,
                 $detail,
-                $status,
-                $millisecondsNamedByRetryAfter,
+                status: $status,
+                millisecondsTheServerAskedToWait: $millisecondsNamedByRetryAfter,
             ),
-            $status >= 400 && $status < 500 => new self(StreamEndKind::RefusedUnrecoverably, $detail, $status),
-            default => new self(StreamEndKind::Refused, $detail, $status),
+            $status >= 400 && $status < 500 => new self(StreamEndKind::RefusedUnrecoverably, $detail, status: $status),
+            default => new self(StreamEndKind::Refused, $detail, status: $status),
         };
     }
 
     public static function dropped(string $cause, ?int $millisecondsNamedByTheStream): self
     {
-        return new self(StreamEndKind::Dropped, $cause, null, $millisecondsNamedByTheStream);
+        return new self(
+            StreamEndKind::Dropped,
+            $cause,
+            millisecondsTheServerAskedToWait: $millisecondsNamedByTheStream,
+        );
     }
 
     public static function payloadNotStored(): self

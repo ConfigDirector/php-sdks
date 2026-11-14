@@ -25,7 +25,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(clientReady: function () use (&$readyCount): void {
+            hooks: new ClientHooks(clientReady: static function () use (&$readyCount): void {
                 $readyCount++;
             }),
         );
@@ -43,7 +43,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->on('clientReady', function () use (&$readyCount): void {
+        $client->on('clientReady', static function () use (&$readyCount): void {
             $readyCount++;
         });
 
@@ -60,7 +60,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->on('clientReady', function () use (&$argumentCounts): void {
+        $client->on('clientReady', static function () use (&$argumentCounts): void {
             $argumentCounts[] = func_num_args();
         });
 
@@ -77,7 +77,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->on('clientReady', function () use (&$readyCount): void {
+        $client->on('clientReady', static function () use (&$readyCount): void {
             $readyCount++;
         });
         $client->initialize();
@@ -95,7 +95,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->on('configsUpdated', function () use ($client, &$valuesRead): void {
+        $client->on('configsUpdated', static function () use ($client, &$valuesRead): void {
             $valuesRead[] = $client->getValue('integer-config', 10);
         });
 
@@ -112,11 +112,11 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $first = function () use (&$calls): void {
+        $first = static function () use (&$calls): void {
             $calls[] = 'first';
         };
         $client->on('clientReady', $first);
-        $client->on('clientReady', function () use (&$calls): void {
+        $client->on('clientReady', static function () use (&$calls): void {
             $calls[] = 'second';
         });
 
@@ -134,7 +134,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $countReady = function () use (&$readyCount): void {
+        $countReady = static function () use (&$readyCount): void {
             $readyCount++;
         };
         $client->on('clientReady', $countReady);
@@ -154,13 +154,13 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
         );
-        $client->on('clientReady', function () use (&$calls): void {
+        $client->on('clientReady', static function () use (&$calls): void {
             $calls[] = 'first clientReady';
         });
-        $client->on('clientReady', function () use (&$calls): void {
+        $client->on('clientReady', static function () use (&$calls): void {
             $calls[] = 'second clientReady';
         });
-        $client->on('configsUpdated', function () use (&$calls): void {
+        $client->on('configsUpdated', static function () use (&$calls): void {
             $calls[] = 'configsUpdated';
         });
 
@@ -204,7 +204,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
                 // @phpstan-ignore argument.type
                 clientReady: [
                     'not a function',
-                    function () use (&$readyCount): void {
+                    static function () use (&$readyCount): void {
                         $readyCount++;
                     },
                 ],
@@ -267,7 +267,7 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configsUpdated: function (ConfigsUpdatedEvent $update) use (&$updates): void {
+            hooks: new ClientHooks(configsUpdated: static function (ConfigsUpdatedEvent $update) use (&$updates): void {
                 $updates[] = $update;
             }),
         );
@@ -301,9 +301,11 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
-                $evaluations[] = $event->evaluation;
-            }),
+            hooks: new ClientHooks(
+                configEvaluated: static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+                    $evaluations[] = $event->evaluation;
+                },
+            ),
         );
         $client->initialize();
 
@@ -312,13 +314,13 @@ final class ClientEventsTest extends SampleConfigsTestCase
         self::assertEquals(
             [
                 new ConfigEvaluation(
-                    'integer-config',
-                    42,
-                    'value-integer-42',
-                    null,
-                    false,
-                    EvaluationReason::FoundMatch,
-                    null,
+                    key: 'integer-config',
+                    value: 42,
+                    valueId: 'value-integer-42',
+                    variation: null,
+                    isDefaultValue: false,
+                    reason: EvaluationReason::FoundMatch,
+                    context: null,
                 ),
             ],
             $evaluations,
@@ -332,9 +334,11 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
-                $evaluations[] = $event->evaluation;
-            }),
+            hooks: new ClientHooks(
+                configEvaluated: static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+                    $evaluations[] = $event->evaluation;
+                },
+            ),
         );
         $client->initialize();
 
@@ -350,16 +354,26 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
-                $evaluations[] = $event->evaluation;
-            }),
+            hooks: new ClientHooks(
+                configEvaluated: static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+                    $evaluations[] = $event->evaluation;
+                },
+            ),
         );
         $client->initialize();
 
         $client->getValue('missing-config', 10);
 
         self::assertEquals(
-            [new ConfigEvaluation('missing-config', 10, null, null, true, EvaluationReason::ConfigStateMissing, null)],
+            [new ConfigEvaluation(
+                key: 'missing-config',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            )],
             $evaluations,
         );
     }
@@ -371,9 +385,11 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
-                $evaluations[] = $event->evaluation;
-            }),
+            hooks: new ClientHooks(
+                configEvaluated: static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+                    $evaluations[] = $event->evaluation;
+                },
+            ),
         );
         $client->initialize();
 
@@ -413,14 +429,14 @@ final class ClientEventsTest extends SampleConfigsTestCase
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
             hooks: new ClientHooks(
-                clientReady: function () use (&$calls): void {
+                clientReady: static function () use (&$calls): void {
                     $calls[] = 'clientReady';
                 },
                 configsUpdated: [
                     static function (): void {
                         throw new \RuntimeException('The handler failed');
                     },
-                    function () use (&$calls): void {
+                    static function () use (&$calls): void {
                         $calls[] = 'configsUpdated';
                     },
                 ],
@@ -440,11 +456,13 @@ final class ClientEventsTest extends SampleConfigsTestCase
             serverSdkKey: 'server-sdk-key',
             connection: self::connectionToTheSdkServer(),
             logger: new RecordingLogger(),
-            hooks: new ClientHooks(configEvaluated: function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
-                $evaluations[] = $event->evaluation;
-            }),
+            hooks: new ClientHooks(
+                configEvaluated: static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+                    $evaluations[] = $event->evaluation;
+                },
+            ),
         );
-        $client->on('configEvaluated', function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
+        $client->on('configEvaluated', static function (ConfigEvaluatedEvent $event) use (&$evaluations): void {
             $evaluations[] = $event->evaluation;
         });
         $client->initialize();

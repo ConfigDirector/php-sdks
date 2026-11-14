@@ -15,12 +15,12 @@ namespace ConfigDirector\Tests\Support;
  *     holdsWithoutAnswering?: bool,
  * }
  */
-final class ScriptedStreamServer
+final readonly class ScriptedStreamServer
 {
     private function __construct(
-        private readonly PhpProcess $process,
-        private readonly string $folder,
-        public readonly string $url,
+        private PhpProcess $process,
+        private string $folder,
+        public string $url,
     ) {}
 
     /**

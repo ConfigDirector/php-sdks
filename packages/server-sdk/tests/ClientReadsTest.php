@@ -25,13 +25,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'permanent-kill-switch',
-                true,
-                'value-kill-switch-on',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                null,
+                key: 'permanent-kill-switch',
+                value: true,
+                valueId: 'value-kill-switch-on',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: null,
             ),
             $evaluation,
         );
@@ -45,13 +45,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'day-of-the-week-config',
-                'Monday',
-                'value-monday',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                null,
+                key: 'day-of-the-week-config',
+                value: 'Monday',
+                valueId: 'value-monday',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: null,
             ),
             $evaluation,
         );
@@ -136,13 +136,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'day-of-the-week-config',
-                'Tuesday',
-                'value-tuesday',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                $proCustomer,
+                key: 'day-of-the-week-config',
+                value: 'Tuesday',
+                valueId: 'value-tuesday',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: $proCustomer,
             ),
             $evaluation,
         );
@@ -172,13 +172,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'temporary-feature-flag',
-                true,
-                'value-flag-on',
-                new Variation('variation-flag-on', 'On'),
-                false,
-                EvaluationReason::FoundMatch,
-                $customer,
+                key: 'temporary-feature-flag',
+                value: true,
+                valueId: 'value-flag-on',
+                variation: new Variation('variation-flag-on', 'On'),
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: $customer,
             ),
             $evaluation,
         );
@@ -192,13 +192,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'temporary-feature-flag',
-                false,
-                'value-flag-off',
-                new Variation('variation-flag-off', 'Off'),
-                false,
-                EvaluationReason::RolloutSkippedNoIdentifier,
-                null,
+                key: 'temporary-feature-flag',
+                value: false,
+                valueId: 'value-flag-off',
+                variation: new Variation('variation-flag-off', 'Off'),
+                isDefaultValue: false,
+                reason: EvaluationReason::RolloutSkippedNoIdentifier,
+                context: null,
             ),
             $evaluation,
         );
@@ -212,13 +212,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'no-such-config',
-                'fallback',
-                null,
-                null,
-                true,
-                EvaluationReason::ConfigStateMissing,
-                null,
+                key: 'no-such-config',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
             ),
             $evaluation,
         );
@@ -231,7 +231,15 @@ final class ClientReadsTest extends SampleConfigsTestCase
         $evaluation = $client->evaluate('', 'fallback');
 
         self::assertEquals(
-            new ConfigEvaluation('', 'fallback', null, null, true, EvaluationReason::ConfigStateMissing, null),
+            new ConfigEvaluation(
+                key: '',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            ),
             $evaluation,
         );
     }
@@ -247,7 +255,15 @@ final class ClientReadsTest extends SampleConfigsTestCase
         $evaluation = $client->evaluate('integer-config', 10);
 
         self::assertEquals(
-            new ConfigEvaluation('integer-config', 10, null, null, true, EvaluationReason::ClientNotReady, null),
+            new ConfigEvaluation(
+                key: 'integer-config',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ClientNotReady,
+                context: null,
+            ),
             $evaluation,
         );
     }
@@ -260,13 +276,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'permanent-kill-switch',
-                'fallback',
-                null,
-                null,
-                true,
-                EvaluationReason::TypeMismatch,
-                null,
+                key: 'permanent-kill-switch',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::TypeMismatch,
+                context: null,
             ),
             $evaluation,
         );
@@ -280,16 +296,17 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'config-without-a-value',
-                'fallback',
-                null,
-                null,
-                true,
-                EvaluationReason::ValueMissing,
-                null,
+                key: 'config-without-a-value',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ValueMissing,
+                context: null,
             ),
             $evaluation,
         );
+        self::assertNull($evaluation->valueId);
     }
 
     public function testAnIntegerReadOfTextThatIsNotANumberReturnsTheInCodeDefaultValue(): void
@@ -299,7 +316,15 @@ final class ClientReadsTest extends SampleConfigsTestCase
         $evaluation = $client->evaluate('day-of-the-week-config', 10);
 
         self::assertEquals(
-            new ConfigEvaluation('day-of-the-week-config', 10, null, null, true, EvaluationReason::InvalidNumber, null),
+            new ConfigEvaluation(
+                key: 'day-of-the-week-config',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::InvalidNumber,
+                context: null,
+            ),
             $evaluation,
         );
     }
@@ -312,13 +337,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'malformed-json-config',
-                ['greeting' => 'fallback'],
-                null,
-                null,
-                true,
-                EvaluationReason::InvalidJson,
-                null,
+                key: 'malformed-json-config',
+                value: ['greeting' => 'fallback'],
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::InvalidJson,
+                context: null,
             ),
             $evaluation,
         );
@@ -332,13 +357,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'day-of-the-week-config',
-                true,
-                null,
-                null,
-                true,
-                EvaluationReason::InvalidBoolean,
-                null,
+                key: 'day-of-the-week-config',
+                value: true,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::InvalidBoolean,
+                context: null,
             ),
             $evaluation,
         );
@@ -353,13 +378,13 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'temporary-feature-flag',
-                'fallback',
-                null,
-                null,
-                true,
-                EvaluationReason::TypeMismatch,
-                $customer,
+                key: 'temporary-feature-flag',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::TypeMismatch,
+                context: $customer,
             ),
             $evaluation,
         );

@@ -1014,37 +1014,37 @@ final class StreamingProcessOverTimeTest extends TestCase
         $clientLifetime = new ClientLifetime($this->clock, 10_000);
         $sdkIdentity = SdkIdentity::ofTheServerSdk();
         $client = new DefaultConfigDirectorClient(
-            new LocalStoreConnection(
+            connection: new LocalStoreConnection(
                 fn(\Closure $reportPayloadReceivedByAPoll): PollingTransport => new PollingTransport(
-                    $localStore->store(),
-                    new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata(), $sdkIdentity),
-                    PollingInterval::ofConfiguredSeconds(60),
-                    3_000,
-                    $clientLifetime,
-                    $this->clock,
-                    $requestLogger,
-                    static function (): void {},
-                    $reportPayloadReceivedByAPoll,
+                    store: $localStore->store(),
+                    endpoint: new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata(), $sdkIdentity),
+                    pollingInterval: PollingInterval::ofConfiguredSeconds(60),
+                    timeoutMilliseconds: 3_000,
+                    clientLifetime: $clientLifetime,
+                    clock: $this->clock,
+                    logger: $requestLogger,
+                    reportUnrecoverableError: static function (): void {},
+                    reportPayloadReceivedByAPoll: $reportPayloadReceivedByAPoll,
                 ),
                 $requestLogger,
             ),
-            new Metadata(),
-            3_000,
-            $requestLogger,
-            new EventHandlers($requestLogger),
-            new LocalStoreTelemetry(
-                $localStore,
-                new EventReporter(
-                    new TelemetryEndpoint($serverUrl, 'server-sdk-key', new Metadata(), $sdkIdentity),
-                    5_000,
-                    $this->clock,
-                    $requestLogger,
+            metadata: new Metadata(),
+            timeoutMilliseconds: 3_000,
+            logger: $requestLogger,
+            eventHandlers: new EventHandlers($requestLogger),
+            telemetry: new LocalStoreTelemetry(
+                localStore: $localStore,
+                eventReporter: new EventReporter(
+                    endpoint: new TelemetryEndpoint($serverUrl, 'server-sdk-key', new Metadata(), $sdkIdentity),
+                    eventQueueLimit: 5_000,
+                    clock: $this->clock,
+                    logger: $requestLogger,
                 ),
-                5_000,
-                10_000,
-                $clientLifetime,
-                $this->clock,
-                $requestLogger,
+                eventQueueLimit: 5_000,
+                flushIntervalMilliseconds: 10_000,
+                clientLifetime: $clientLifetime,
+                clock: $this->clock,
+                logger: $requestLogger,
             ),
         );
         $client->initialize();

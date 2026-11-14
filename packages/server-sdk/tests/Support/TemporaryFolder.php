@@ -6,6 +6,8 @@ namespace ConfigDirector\Tests\Support;
 
 final class TemporaryFolder
 {
+    private function __construct() {}
+
     public static function create(): string
     {
         $folder = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'configdirector-tests-' . bin2hex(random_bytes(8));

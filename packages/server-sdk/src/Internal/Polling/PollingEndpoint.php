@@ -22,6 +22,7 @@ final readonly class PollingEndpoint
 
     public function __construct(
         string $baseUrl,
+        #[\SensitiveParameter]
         private string $serverSdkKey,
         Metadata $metadata,
         private SdkIdentity $sdkIdentity,
@@ -49,7 +50,7 @@ final readonly class PollingEndpoint
             CURLOPT_HEADERFUNCTION => static function (\CurlHandle $request, string $headerLine) use (
                 &$retryAfterHeader,
             ): int {
-                $retryAfterHeader = RetryAfterHeader::valueIn($headerLine) ?? $retryAfterHeader;
+                $retryAfterHeader = RetryAfterHeader::in($headerLine) ?? $retryAfterHeader;
 
                 return strlen($headerLine);
             },

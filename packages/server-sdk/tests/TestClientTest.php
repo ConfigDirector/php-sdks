@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ConfigDirector\Tests;
 
 use ConfigDirector\ConfigDirectorConnectionException;
+use ConfigDirector\ConfigDirectorException;
 use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigState;
@@ -18,6 +19,7 @@ use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 final class TestClientTest extends TestCase
 {
@@ -62,7 +64,15 @@ final class TestClientTest extends TestCase
 
         self::assertFalse($testClient->client->isReady());
         self::assertEquals(
-            new ConfigEvaluation('new-checkout', false, null, null, true, EvaluationReason::ClientNotReady, null),
+            new ConfigEvaluation(
+                key: 'new-checkout',
+                value: false,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ClientNotReady,
+                context: null,
+            ),
             $testClient->client->evaluate('new-checkout', false),
         );
     }
@@ -76,11 +86,22 @@ final class TestClientTest extends TestCase
         $context = new Context(id: 'user-123');
 
         $testClient->client->initialize();
+        $evaluation = $testClient->client->evaluate('new-checkout', false, $context);
 
         self::assertEquals(
-            new ConfigEvaluation('new-checkout', true, null, null, false, EvaluationReason::FoundMatch, $context),
-            $testClient->client->evaluate('new-checkout', false, $context),
+            new ConfigEvaluation(
+                key: 'new-checkout',
+                value: true,
+                valueId: null,
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: $context,
+            ),
+            $evaluation,
         );
+        self::assertNull($evaluation->valueId);
+        self::assertNull($evaluation->variation);
     }
 
     public function testEveryContextReceivesTheSameTestValue(): void
@@ -112,8 +133,18 @@ final class TestClientTest extends TestCase
 
         self::assertEquals(
             [
-                'new-checkout' => new ConfigState('test-config:new-checkout', 'new-checkout', 'boolean', 'true'),
-                'greeting' => new ConfigState('test-config:greeting', 'greeting', 'string', 'hello'),
+                'new-checkout' => new ConfigState(
+                    id: 'test-config:new-checkout',
+                    key: 'new-checkout',
+                    type: 'boolean',
+                    value: 'true',
+                ),
+                'greeting' => new ConfigState(
+                    id: 'test-config:greeting',
+                    key: 'greeting',
+                    type: 'string',
+                    value: 'hello',
+                ),
             ],
             $testClient->client->getAllConfigs(),
         );
@@ -129,7 +160,15 @@ final class TestClientTest extends TestCase
         $testClient->client->initialize();
 
         self::assertEquals(
-            new ConfigEvaluation('page-size', 10, null, null, true, EvaluationReason::ConfigStateMissing, null),
+            new ConfigEvaluation(
+                key: 'page-size',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            ),
             $testClient->client->evaluate('page-size', 10),
         );
     }
@@ -138,10 +177,13 @@ final class TestClientTest extends TestCase
     {
         $testClient = ConfigDirectorTesting::createTestClient(values: ['max-items' => 20], logger: new RecordingLogger());
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
-        });
-        $testClient->client->watch('max-items', 0, function (int $value) use (&$deliveries): void {
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
+            },
+        );
+        $testClient->client->watch('max-items', 0, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch', $value];
         });
         $testClient->client->initialize();
@@ -169,7 +211,7 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $watchedValues = [];
-        $testClient->client->watch('greeting', '', function (string $value) use (&$watchedValues): void {
+        $testClient->client->watch('greeting', '', static function (string $value) use (&$watchedValues): void {
             $watchedValues[] = $value;
         });
         $testClient->client->initialize();
@@ -184,10 +226,13 @@ final class TestClientTest extends TestCase
     {
         $testClient = ConfigDirectorTesting::createTestClient(values: ['max-items' => 20], logger: new RecordingLogger());
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
-        });
-        $testClient->client->watch('max-items', 0, function (int $value) use (&$deliveries): void {
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
+            },
+        );
+        $testClient->client->watch('max-items', 0, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch', $value];
         });
         $testClient->client->initialize();
@@ -218,7 +263,15 @@ final class TestClientTest extends TestCase
         $testClient->removeValue('max-items');
 
         self::assertEquals(
-            new ConfigEvaluation('max-items', 10, null, null, true, EvaluationReason::ConfigStateMissing, null),
+            new ConfigEvaluation(
+                key: 'max-items',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            ),
             $testClient->client->evaluate('max-items', 10),
         );
     }
@@ -230,13 +283,16 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
-        });
-        $testClient->client->watch('max-items', 10, function (int $value) use (&$deliveries): void {
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
+            },
+        );
+        $testClient->client->watch('max-items', 10, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch on max-items', $value];
         });
-        $testClient->client->watch('greeting', '', function (string $value) use (&$deliveries): void {
+        $testClient->client->watch('greeting', '', static function (string $value) use (&$deliveries): void {
             $deliveries[] = ['watch on greeting', $value];
         });
         $testClient->client->initialize();
@@ -258,7 +314,15 @@ final class TestClientTest extends TestCase
         $testClient->client->initialize();
 
         self::assertEquals(
-            new ConfigEvaluation('max-items', 10, null, null, true, EvaluationReason::ConfigStateMissing, null),
+            new ConfigEvaluation(
+                key: 'max-items',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
+            ),
             $testClient->client->evaluate('max-items', 10),
         );
         self::assertSame('hello', $testClient->client->getValue('greeting', ''));
@@ -276,8 +340,18 @@ final class TestClientTest extends TestCase
 
         self::assertEquals(
             [
-                'greeting' => new ConfigState('test-config:greeting', 'greeting', 'string', 'bonjour'),
-                'new-checkout' => new ConfigState('test-config:new-checkout', 'new-checkout', 'boolean', 'true'),
+                'greeting' => new ConfigState(
+                    id: 'test-config:greeting',
+                    key: 'greeting',
+                    type: 'string',
+                    value: 'bonjour',
+                ),
+                'new-checkout' => new ConfigState(
+                    id: 'test-config:new-checkout',
+                    key: 'new-checkout',
+                    type: 'boolean',
+                    value: 'true',
+                ),
             ],
             $testClient->client->getAllConfigs(),
         );
@@ -290,16 +364,19 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
-        });
-        $testClient->client->watch('max-items', 10, function (int $value) use (&$deliveries): void {
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
+            },
+        );
+        $testClient->client->watch('max-items', 10, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch on max-items', $value];
         });
-        $testClient->client->watch('greeting', '', function (string $value) use (&$deliveries): void {
+        $testClient->client->watch('greeting', '', static function (string $value) use (&$deliveries): void {
             $deliveries[] = ['watch on greeting', $value];
         });
-        $testClient->client->watch('theme', '', function (string $value) use (&$deliveries): void {
+        $testClient->client->watch('theme', '', static function (string $value) use (&$deliveries): void {
             $deliveries[] = ['watch on theme', $value];
         });
         $testClient->client->initialize();
@@ -376,7 +453,7 @@ final class TestClientTest extends TestCase
 
         self::assertSame(
             [['kindSample' => 'Device'], ['kindSample' => 'Device']],
-            $logger->contextsLoggedAt('error'),
+            $logger->contextsLoggedAt(LogLevel::ERROR),
         );
     }
 
@@ -413,6 +490,19 @@ final class TestClientTest extends TestCase
         self::assertSame(0.15, $testClient->client->getValue('discount-rate', 0.0));
     }
 
+    public function testTheCauseOfAValueSetValueRejectsIsAConfigDirectorException(): void
+    {
+        $testClient = ConfigDirectorTesting::createTestClient(logger: new RecordingLogger());
+
+        try {
+            $testClient->setValue('max-items', INF);
+            self::fail('setValue() accepted an infinite float.');
+        } catch (ConfigDirectorValidationException $rejectedValue) {
+        }
+
+        self::assertInstanceOf(ConfigDirectorException::class, $rejectedValue->getPrevious());
+    }
+
     public function testReplaceValuesRejectsAValueItCannotServeAndKeepsTheValuesItHad(): void
     {
         $testClient = ConfigDirectorTesting::createTestClient(
@@ -429,8 +519,18 @@ final class TestClientTest extends TestCase
 
         self::assertEquals(
             [
-                'max-items' => new ConfigState('test-config:max-items', 'max-items', 'integer', '20'),
-                'greeting' => new ConfigState('test-config:greeting', 'greeting', 'string', 'hello'),
+                'max-items' => new ConfigState(
+                    id: 'test-config:max-items',
+                    key: 'max-items',
+                    type: 'integer',
+                    value: '20',
+                ),
+                'greeting' => new ConfigState(
+                    id: 'test-config:greeting',
+                    key: 'greeting',
+                    type: 'string',
+                    value: 'hello',
+                ),
             ],
             $testClient->client->getAllConfigs(),
         );
@@ -452,7 +552,7 @@ final class TestClientTest extends TestCase
 
         self::assertGreaterThanOrEqual(50, $waitedMilliseconds);
         self::assertFalse($testClient->client->isReady());
-        self::assertSame([['timeout' => 50]], $logger->contextsLoggedAt('warning'));
+        self::assertSame([['timeout' => 50]], $logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testAHeldInitializeWaitsForTheWholeTimeoutWhenASleepWakesEarly(): void
@@ -475,13 +575,16 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
-        });
-        $testClient->client->watch('max-items', 0, function (int $value) use (&$deliveries): void {
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys, $event->removedKeys];
+            },
+        );
+        $testClient->client->watch('max-items', 0, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch', $value];
         });
-        $testClient->client->on('clientReady', function () use (&$deliveries): void {
+        $testClient->client->on('clientReady', static function () use (&$deliveries): void {
             $deliveries[] = ['clientReady'];
         });
         $testClient->holdInitialization();
@@ -573,7 +676,7 @@ final class TestClientTest extends TestCase
 
         $testClient->client->initialize();
 
-        self::assertSame([['timeout' => 3_000]], $logger->contextsLoggedAt('warning'));
+        self::assertSame([['timeout' => 3_000]], $logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testAFailedInitializeReturnsAtOnceNotReadyWithoutClientReadyAndLogsOneError(): void
@@ -585,7 +688,7 @@ final class TestClientTest extends TestCase
             logger: $logger,
         );
         $readyCount = 0;
-        $testClient->client->on('clientReady', function () use (&$readyCount): void {
+        $testClient->client->on('clientReady', static function () use (&$readyCount): void {
             $readyCount++;
         });
         $testClient->failInitialization();
@@ -597,7 +700,7 @@ final class TestClientTest extends TestCase
         self::assertLessThan(1_000, $waitedMilliseconds);
         self::assertFalse($testClient->client->isReady());
         self::assertSame(0, $readyCount);
-        self::assertCount(1, $logger->contextsLoggedAt('error'));
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::ERROR));
     }
 
     public function testAFailedInitializeFiresConnectionErrorWithTheStatusOfARefusedKey(): void
@@ -607,7 +710,7 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $errors = [];
-        $testClient->client->on('connectionError', function (ConnectionErrorEvent $event) use (&$errors): void {
+        $testClient->client->on('connectionError', static function (ConnectionErrorEvent $event) use (&$errors): void {
             $errors[] = $event->error;
         });
         $testClient->failInitialization();
@@ -628,7 +731,7 @@ final class TestClientTest extends TestCase
             logger: $logger,
         );
         $errors = [];
-        $testClient->client->on('connectionError', function (ConnectionErrorEvent $event) use (&$errors): void {
+        $testClient->client->on('connectionError', static function (ConnectionErrorEvent $event) use (&$errors): void {
             $errors[] = $event->error;
         });
         $testClient->holdInitialization();
@@ -638,7 +741,7 @@ final class TestClientTest extends TestCase
         $testClient->completeInitialization();
 
         self::assertCount(1, $errors);
-        self::assertCount(1, $logger->contextsLoggedAt('error'));
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::ERROR));
         self::assertFalse($testClient->client->isReady());
     }
 
@@ -691,7 +794,7 @@ final class TestClientTest extends TestCase
     {
         $testClient = ConfigDirectorTesting::createTestClient(values: ['max-items' => 20], logger: new RecordingLogger());
         $readyCount = 0;
-        $testClient->client->on('clientReady', function () use (&$readyCount): void {
+        $testClient->client->on('clientReady', static function () use (&$readyCount): void {
             $readyCount++;
         });
 
@@ -730,10 +833,18 @@ final class TestClientTest extends TestCase
 
         self::assertFalse($testClient->client->isReady());
         self::assertEquals(
-            new ConfigEvaluation('max-items', 10, null, null, true, EvaluationReason::ClientNotReady, null),
+            new ConfigEvaluation(
+                key: 'max-items',
+                value: 10,
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ClientNotReady,
+                context: null,
+            ),
             $testClient->client->evaluate('max-items', 10),
         );
-        self::assertSame([], $logger->contextsLoggedAt('error'));
+        self::assertSame([], $logger->contextsLoggedAt(LogLevel::ERROR));
     }
 
     public function testCompletingAnInitializationHeldWhenTheClientWasDisposedDeliversNothing(): void
@@ -760,21 +871,24 @@ final class TestClientTest extends TestCase
         );
         $testClient->client->initialize();
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys];
-        });
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys];
+            },
+        );
         $testClient->client->watch(
             'max-items',
             0,
-            function (int $value) use (&$deliveries, $testClient): void {
+            static function (int $value) use (&$deliveries, $testClient): void {
                 $deliveries[] = ['watch on max-items', $value];
                 $testClient->setValue('greeting', 'bonjour');
             },
         );
-        $testClient->client->watch('page-size', 0, function (int $value) use (&$deliveries): void {
+        $testClient->client->watch('page-size', 0, static function (int $value) use (&$deliveries): void {
             $deliveries[] = ['watch on page-size', $value];
         });
-        $testClient->client->watch('greeting', '', function (string $value) use (&$deliveries): void {
+        $testClient->client->watch('greeting', '', static function (string $value) use (&$deliveries): void {
             $deliveries[] = ['watch on greeting', $value];
         });
 
@@ -799,7 +913,7 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $testClient->client->initialize();
-        $testClient->client->watch('max-items', 0, function () use ($testClient): void {
+        $testClient->client->watch('max-items', 0, static function () use ($testClient): void {
             $testClient->setValue('greeting', 'bonjour');
             $testClient->client->dispose();
         });
@@ -816,21 +930,24 @@ final class TestClientTest extends TestCase
             logger: new RecordingLogger(),
         );
         $deliveries = [];
-        $testClient->client->on('configsUpdated', function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
-            $deliveries[] = ['configsUpdated', $event->keys];
-        });
+        $testClient->client->on(
+            'configsUpdated',
+            static function (ConfigsUpdatedEvent $event) use (&$deliveries): void {
+                $deliveries[] = ['configsUpdated', $event->keys];
+            },
+        );
         $testClient->client->watch(
             'max-items',
             0,
-            function (int $value) use (&$deliveries, $testClient): void {
+            static function (int $value) use (&$deliveries, $testClient): void {
                 $deliveries[] = ['watch on max-items', $value];
                 $testClient->setValue('greeting', 'bonjour');
             },
         );
-        $testClient->client->watch('greeting', '', function (string $value) use (&$deliveries): void {
+        $testClient->client->watch('greeting', '', static function (string $value) use (&$deliveries): void {
             $deliveries[] = ['watch on greeting', $value];
         });
-        $testClient->client->on('clientReady', function () use (&$deliveries): void {
+        $testClient->client->on('clientReady', static function () use (&$deliveries): void {
             $deliveries[] = ['clientReady'];
         });
 
@@ -859,8 +976,13 @@ final class TestClientTest extends TestCase
 
         self::assertEquals(
             [
-                new TrackedEvent('checkout-started', $context, null, null),
-                new TrackedEvent('checkout-completed', $context, 49.9, ['plan' => 'pro']),
+                new TrackedEvent(name: 'checkout-started', context: $context, value: null, details: null),
+                new TrackedEvent(
+                    name: 'checkout-completed',
+                    context: $context,
+                    value: 49.9,
+                    details: ['plan' => 'pro'],
+                ),
             ],
             $testClient->trackedEvents(),
         );
@@ -874,7 +996,7 @@ final class TestClientTest extends TestCase
         $testClient->client->track('nightly-import-finished');
 
         self::assertEquals(
-            [new TrackedEvent('nightly-import-finished', null, null, null)],
+            [new TrackedEvent(name: 'nightly-import-finished', context: null, value: null, details: null)],
             $testClient->trackedEvents(),
         );
     }
@@ -887,7 +1009,7 @@ final class TestClientTest extends TestCase
         $testClient->client->track(str_repeat('n', 151));
 
         self::assertSame([], $testClient->trackedEvents());
-        self::assertCount(1, $logger->contextsLoggedAt('warning'));
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testAnEventIsRecordedWithoutDetailsOfTwentyOneTopLevelKeysAndLogsAWarning(): void
@@ -902,10 +1024,15 @@ final class TestClientTest extends TestCase
         $testClient->client->track('checkout-completed', new Context(id: 'user-1'), value: 49.9, details: $details);
 
         self::assertEquals(
-            [new TrackedEvent('checkout-completed', new Context(id: 'user-1'), 49.9, null)],
+            [new TrackedEvent(
+                name: 'checkout-completed',
+                context: new Context(id: 'user-1'),
+                value: 49.9,
+                details: null,
+            )],
             $testClient->trackedEvents(),
         );
-        self::assertCount(1, $logger->contextsLoggedAt('warning'));
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testAnEventIsRecordedWithoutAValueThatIsNotFiniteAndLogsAWarning(): void
@@ -916,10 +1043,10 @@ final class TestClientTest extends TestCase
         $testClient->client->track('checkout-completed', value: INF, details: ['plan' => 'pro']);
 
         self::assertEquals(
-            [new TrackedEvent('checkout-completed', null, null, ['plan' => 'pro'])],
+            [new TrackedEvent(name: 'checkout-completed', context: null, value: null, details: ['plan' => 'pro'])],
             $testClient->trackedEvents(),
         );
-        self::assertCount(1, $logger->contextsLoggedAt('warning'));
+        self::assertCount(1, $logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testEveryEventTheSdkWouldNotReportAsItWasTrackedLogsAWarning(): void
@@ -930,7 +1057,7 @@ final class TestClientTest extends TestCase
         $testClient->client->track('');
         $testClient->client->track('');
 
-        self::assertCount(2, $logger->contextsLoggedAt('warning'));
+        self::assertCount(2, $logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testMoreThanOneThousandEventsAreRecorded(): void
@@ -952,7 +1079,7 @@ final class TestClientTest extends TestCase
         $testClient->client->track('checkout-completed', new Context(id: 'acme', kind: 'Tenant'));
 
         self::assertEquals(
-            [new TrackedEvent('checkout-completed', null, null, null)],
+            [new TrackedEvent(name: 'checkout-completed', context: null, value: null, details: null)],
             $testClient->trackedEvents(),
         );
     }

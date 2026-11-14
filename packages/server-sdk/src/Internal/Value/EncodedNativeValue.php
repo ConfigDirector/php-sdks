@@ -78,7 +78,7 @@ final readonly class EncodedNativeValue
      */
     private static function jsonTextOf(array|\stdClass $value, string $configKey): string
     {
-        self::rejectUnservableMembersOf($value, $configKey, '', 1);
+        self::rejectUnservableMembersOf($value, $configKey, jsonPath: '', depth: 1);
         try {
             return json_encode($value, self::JSON_TEXT_FLAGS, self::MAXIMUM_JSON_DEPTH);
         } catch (\JsonException $exception) {

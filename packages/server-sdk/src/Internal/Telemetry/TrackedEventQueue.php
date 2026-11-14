@@ -17,7 +17,7 @@ final class TrackedEventQueue
     private array $warningsRaised = [];
 
     /**
-     * @return list<TrackedEventWarning> The warnings this queue raises for the first time.
+     * @return list<TrackedEventWarning>
      */
     public function keepTrackedEvent(
         AdmittedTrackedEvent|DroppedTrackedEvent $admission,
@@ -27,7 +27,15 @@ final class TrackedEventQueue
             ? $this->warningsOfKeepingThe($admission, $happenedAtEpochMilliseconds)
             : $admission->warnings;
 
-        return array_values(array_filter($warnings, $this->isRaisedForTheFirstTime(...)));
+        $warningsRaisedForTheFirstTime = [];
+        foreach ($warnings as $warning) {
+            if (!isset($this->warningsRaised[$warning->name])) {
+                $this->warningsRaised[$warning->name] = true;
+                $warningsRaisedForTheFirstTime[] = $warning;
+            }
+        }
+
+        return $warningsRaisedForTheFirstTime;
     }
 
     public function keepEntryUnlessFull(string $entryJson): bool
@@ -66,13 +74,5 @@ final class TrackedEventQueue
         return $this->keepEntryUnlessFull($entryJson)
             ? $trackedEvent->warnings
             : [TrackedEventWarning::ReportAlreadyFull];
-    }
-
-    private function isRaisedForTheFirstTime(TrackedEventWarning $warning): bool
-    {
-        $isFirst = !isset($this->warningsRaised[$warning->name]);
-        $this->warningsRaised[$warning->name] = true;
-
-        return $isFirst;
     }
 }

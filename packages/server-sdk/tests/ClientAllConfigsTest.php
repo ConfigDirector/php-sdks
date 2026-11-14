@@ -44,11 +44,11 @@ final class ClientAllConfigsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigState(
-                '9a3e5b71-6c2d-4f08-8b1a-4d7c2e9f5a03',
-                'integer-config',
-                'integer',
-                '42',
-                'value-integer-42',
+                id: '9a3e5b71-6c2d-4f08-8b1a-4d7c2e9f5a03',
+                key: 'integer-config',
+                type: 'integer',
+                value: '42',
+                valueId: 'value-integer-42',
             ),
             $states['integer-config'],
         );
@@ -62,11 +62,11 @@ final class ClientAllConfigsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigState(
-                '5c8a2d94-1b7f-4e63-a0d5-9f3b6c1e7d04',
-                'day-of-the-week-config',
-                'string',
-                'Tuesday',
-                'value-tuesday',
+                id: '5c8a2d94-1b7f-4e63-a0d5-9f3b6c1e7d04',
+                key: 'day-of-the-week-config',
+                type: 'string',
+                value: 'Tuesday',
+                valueId: 'value-tuesday',
             ),
             $states['day-of-the-week-config'],
         );
@@ -80,14 +80,14 @@ final class ClientAllConfigsTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigState(
-                '7b0c4f52-3d1e-4a86-9c2f-1e5d8a6b4c01',
-                'temporary-feature-flag',
-                'boolean',
-                'true',
-                'value-flag-on',
-                new Variation('variation-flag-on', 'On'),
-                'rule-flag-rollout',
-                'share-flag-on',
+                id: '7b0c4f52-3d1e-4a86-9c2f-1e5d8a6b4c01',
+                key: 'temporary-feature-flag',
+                type: 'boolean',
+                value: 'true',
+                valueId: 'value-flag-on',
+                variation: new Variation('variation-flag-on', 'On'),
+                ruleId: 'rule-flag-rollout',
+                shareId: 'share-flag-on',
             ),
             $states['temporary-feature-flag'],
         );

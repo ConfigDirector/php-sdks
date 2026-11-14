@@ -8,8 +8,10 @@ use DateTimeImmutable;
 
 final class DatetimeComparison
 {
-    private const string ECMASCRIPT_DATE_TIME = '/\A([+-][0-9]{6}|[0-9]{4})(?:-([0-9]{2})(?:-([0-9]{2}))?)?'
-        . '(?:T([0-9]{2}):([0-9]{2})(?::([0-9]{2})(?:\.([0-9]+))?)?([Zz]|[+-][0-9]{2}:[0-9]{2})?)?\z/';
+    private const string ECMASCRIPT_DATE_TIME = '/\A(?<year>[+-][0-9]{6}|[0-9]{4})'
+        . '(?:-(?<month>[0-9]{2})(?:-(?<day>[0-9]{2}))?)?'
+        . '(?:T(?<hour>[0-9]{2}):(?<minute>[0-9]{2})(?::(?<second>[0-9]{2})(?:\.(?<fraction>[0-9]+))?)?'
+        . '(?<offset>[Zz]|[+-][0-9]{2}:[0-9]{2})?)?\z/';
 
     private function __construct() {}
 
@@ -37,14 +39,14 @@ final class DatetimeComparison
             return null;
         }
 
-        $year = (int) $match[1];
-        $month = (int) ($match[2] ?? 1);
-        $day = (int) ($match[3] ?? 1);
-        $hour = (int) $match[4];
-        $minute = (int) $match[5];
-        $second = (int) $match[6];
-        $millisecond = (int) str_pad(substr($match[7] ?? '', 0, 3), 3, '0');
-        $offsetMinutes = self::offsetMinutesOf($match[8]);
+        $year = (int) $match['year'];
+        $month = (int) ($match['month'] ?? 1);
+        $day = (int) ($match['day'] ?? 1);
+        $hour = (int) $match['hour'];
+        $minute = (int) $match['minute'];
+        $second = (int) $match['second'];
+        $millisecond = (int) str_pad(substr($match['fraction'] ?? '', 0, 3), 3, '0');
+        $offsetMinutes = self::offsetMinutesOf($match['offset']);
         if ($offsetMinutes === null || !self::isPossibleDate($year, $month, $day) || $hour > 23 || $minute > 59
             || $second > 59) {
             return null;

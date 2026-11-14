@@ -32,7 +32,10 @@ final class LocalStoreTelemetry implements ClientTelemetry
         private readonly Clock $clock,
         private readonly LoggerInterface $logger,
     ) {
-        $this->telemetryOfThisClient = new CollectedTelemetry($eventQueueLimit, $clock->epochMilliseconds());
+        $this->telemetryOfThisClient = new CollectedTelemetry(
+            $eventQueueLimit,
+            collectingSinceEpochMilliseconds: $clock->epochMilliseconds(),
+        );
         $this->movedToTheStoreAtMonotonicMilliseconds = $clock->monotonicMilliseconds();
     }
 
@@ -85,7 +88,7 @@ final class LocalStoreTelemetry implements ClientTelemetry
             $this->clock->epochMilliseconds(),
         );
         foreach ($warnings as $warning) {
-            $this->warnAboutTrackedEvents($warning);
+            $this->logger->warning($warning->messageOfTheFirstInABatch());
         }
     }
 
@@ -120,7 +123,7 @@ final class LocalStoreTelemetry implements ClientTelemetry
         $telemetryToMove = $this->telemetryOfThisClient;
         $this->telemetryOfThisClient = new CollectedTelemetry(
             $this->eventQueueLimit,
-            $this->clock->epochMilliseconds(),
+            collectingSinceEpochMilliseconds: $this->clock->epochMilliseconds(),
         );
         if ($telemetryToMove->isEmpty() && !$this->localStore->isOpened()) {
             return;
@@ -141,7 +144,7 @@ final class LocalStoreTelemetry implements ClientTelemetry
     }
 
     private function telemetryToSendAfterAdding(
-        CollectedTelemetry $telemetryOfThisClient,
+        CollectedTelemetry $telemetryToMove,
         TelemetryLock $telemetryLock,
         bool $sendsWhatTheStoreHoldsAtOnce,
         LocalStore $store,
@@ -152,14 +155,14 @@ final class LocalStoreTelemetry implements ClientTelemetry
 
         $now = $this->clock->epochMilliseconds();
 
-        $isKept = $telemetryOfThisClient->isEmpty() || $telemetryLock->addTelemetryOfAClient(
-            $telemetryOfThisClient->telemetryFileLine(),
-            $telemetryOfThisClient->collectingSinceEpochMilliseconds(),
+        $isKept = $telemetryToMove->isEmpty() || $telemetryLock->addTelemetryOfAClient(
+            $telemetryToMove->telemetryFileLine(),
+            $telemetryToMove->collectingSinceEpochMilliseconds(),
         );
         if (!$isKept) {
             $telemetryLock->countAsDropped(
-                $telemetryOfThisClient->evaluationsCollected(),
-                $telemetryOfThisClient->capturedContextsCollected(),
+                $telemetryToMove->evaluationsCollected(),
+                $telemetryToMove->capturedContextsCollected(),
                 $now,
             );
         }
@@ -174,10 +177,5 @@ final class LocalStoreTelemetry implements ClientTelemetry
         $isSentByThisProcess = $isDue && !$store->isHeldByAStreamingProcess();
 
         return $isSentByThisProcess ? $telemetryLock->takeStoredTelemetry($now) : null;
-    }
-
-    private function warnAboutTrackedEvents(TrackedEventWarning $warning): void
-    {
-        $this->logger->warning($warning->messageOfTheFirstInABatch());
     }
 }

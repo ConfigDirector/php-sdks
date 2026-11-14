@@ -83,20 +83,20 @@ final class LocalStoreConnectionTest extends TestCase
 
         return new LocalStoreConnection(
             fn(\Closure $reportPayloadReceivedByAPoll): PollingTransport => new PollingTransport(
-                LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger),
-                new PollingEndpoint(
+                store: LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger),
+                endpoint: new PollingEndpoint(
                     'http://127.0.0.1:9',
                     'server-sdk-key',
                     new Metadata(),
                     SdkIdentity::ofTheServerSdk(),
                 ),
-                PollingInterval::ofConfiguredSeconds(60),
-                3_000,
-                new ClientLifetime($this->clock, 30_000),
-                $this->clock,
-                $logger,
-                static function (): void {},
-                $reportPayloadReceivedByAPoll,
+                pollingInterval: PollingInterval::ofConfiguredSeconds(60),
+                timeoutMilliseconds: 3_000,
+                clientLifetime: new ClientLifetime($this->clock, 30_000),
+                clock: $this->clock,
+                logger: $logger,
+                reportUnrecoverableError: static function (): void {},
+                reportPayloadReceivedByAPoll: $reportPayloadReceivedByAPoll,
             ),
             $logger,
         );

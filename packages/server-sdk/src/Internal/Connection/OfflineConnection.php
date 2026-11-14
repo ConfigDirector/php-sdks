@@ -72,7 +72,10 @@ final readonly class OfflineConnection implements Connection
      */
     private static function payloadServing(array $values): ServerSdkPayload
     {
-        return new ServerSdkPayload(ConfigDefinition::servingEachValueToEveryContext($values, 'offline:'), []);
+        return new ServerSdkPayload(
+            ConfigDefinition::servingEachValueToEveryContext($values, 'offline:'),
+            segments: [],
+        );
     }
 
     /**

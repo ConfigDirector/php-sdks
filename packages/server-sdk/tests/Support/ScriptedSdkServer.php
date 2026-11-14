@@ -15,12 +15,12 @@ namespace ConfigDirector\Tests\Support;
  *     closes?: 'before-answering'|'mid-body',
  * }
  */
-final class ScriptedSdkServer
+final readonly class ScriptedSdkServer
 {
     private function __construct(
-        private readonly PhpProcess $process,
-        private readonly string $folder,
-        public readonly string $url,
+        private PhpProcess $process,
+        private string $folder,
+        public string $url,
     ) {}
 
     /**
@@ -28,7 +28,7 @@ final class ScriptedSdkServer
      */
     public static function answering(array $answersInOrder): self
     {
-        return self::started($answersInOrder, false);
+        return self::started($answersInOrder, answersOverTlsWithASelfSignedCertificate: false);
     }
 
     /**
@@ -36,7 +36,7 @@ final class ScriptedSdkServer
      */
     public static function answeringOverTlsWithASelfSignedCertificate(array $answersInOrder): self
     {
-        return self::started($answersInOrder, true);
+        return self::started($answersInOrder, answersOverTlsWithASelfSignedCertificate: true);
     }
 
     /**

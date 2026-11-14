@@ -50,6 +50,12 @@ Targets that run per package take `PACKAGES`, so `make test PACKAGES=server-sdk`
 level with no baseline; a finding is fixed, not ignored. `make format` applies PHP-CS-Fixer's fixes.
 PHPUnit fails a run on warnings, notices, deprecations and risky tests.
 
+The server SDK's `phpstan.dist.neon` also turns on several checks that no PHPStan level includes, such
+as a missing `#[\Override]` and a property a constructor leaves unset. The files in
+`packages/server-sdk/tests/StaticAnalysis/` are not PHPUnit tests: PHPStan checks each `assertType()`
+call in them during `make lint`, which is how the types a caller's static analysis sees from
+`getValue` and `evaluate` are tested.
+
 `make verify-php` prints the version of the PHP that runs it and fails when that release lacks the CVE
 fixes above; every CI job runs it first. `make verify-lock` fails when a `composer.lock` no longer
 matches its `composer.json`. `make audit` runs `composer audit` against each lock file.

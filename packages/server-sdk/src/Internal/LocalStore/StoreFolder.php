@@ -11,13 +11,13 @@ final readonly class StoreFolder
         public ?FolderRefusal $refusal,
     ) {}
 
-    public static function openedFor(string $serverSdkKey, ?string $storagePath): self
+    public static function openedFor(#[\SensitiveParameter] string $serverSdkKey, ?string $storagePath): self
     {
         $folderNameOfTheKey = hash('sha256', $serverSdkKey);
 
         return SilencedWarnings::during(static function () use ($storagePath, $folderNameOfTheKey): self {
             if (PHP_OS_FAMILY === 'Windows') {
-                return self::madeIn($storagePath, 'configdirector', $folderNameOfTheKey, null);
+                return self::madeIn($storagePath, 'configdirector', $folderNameOfTheKey, requiredOwnerId: null);
             }
 
             $folderForAProbeFile = $storagePath ?? sys_get_temp_dir();
@@ -25,7 +25,12 @@ final readonly class StoreFolder
 
             return $systemUserId === null
                 ? new self($folderForAProbeFile, FolderRefusal::NotWritable)
-                : self::madeIn($storagePath, "configdirector-{$systemUserId}", $folderNameOfTheKey, $systemUserId);
+                : self::madeIn(
+                    $storagePath,
+                    "configdirector-{$systemUserId}",
+                    $folderNameOfTheKey,
+                    requiredOwnerId: $systemUserId,
+                );
         });
     }
 
@@ -46,7 +51,7 @@ final readonly class StoreFolder
             }
         }
 
-        return new self($folder, null);
+        return new self($folder, refusal: null);
     }
 
     private static function refusalOf(string $folder, ?int $requiredOwnerId): ?FolderRefusal

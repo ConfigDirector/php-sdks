@@ -156,7 +156,7 @@ final class StreamingProcessTest extends TestCase
     {
         $server = $this->serverStreaming([['status' => 401, 'body' => 'Unauthorized']]);
 
-        $output = $this->finished($this->startAStreamingProcess())->output;
+        $output = $this->finishedStreamingProcess($this->startAStreamingProcess())->output;
 
         self::assertSame(
             ['info-logged', 'error-logged', 'run-threw-connection-exception 401'],
@@ -173,7 +173,7 @@ final class StreamingProcessTest extends TestCase
         $firstStreamingProcess = $this->startAStreamingProcess();
         $this->waitUntilTheLocalStoreHoldsAPayload();
 
-        $outputOfTheSecond = $this->finished($this->startAStreamingProcess())->output;
+        $outputOfTheSecond = $this->finishedStreamingProcess($this->startAStreamingProcess())->output;
 
         self::assertSame(['error-logged', 'run-threw-configdirector-exception'], self::linesOf($outputOfTheSecond));
         self::assertTrue($firstStreamingProcess->isRunning());
@@ -207,7 +207,7 @@ final class StreamingProcessTest extends TestCase
         $reportsSentBeforeTheSignal = $server->requestsReceivedAt('/server/telemetry/v1');
 
         $streamingProcess->signal(SIGTERM);
-        $finishedProcess = $this->finished($streamingProcess);
+        $finishedProcess = $this->finishedStreamingProcess($streamingProcess);
         $reports = $server->requestsReceivedAt('/server/telemetry/v1');
 
         self::assertSame([], $reportsSentBeforeTheSignal);
@@ -233,7 +233,7 @@ final class StreamingProcessTest extends TestCase
         $this->waitUntilTheLocalStoreHoldsAPayload();
 
         $streamingProcess->signal(SIGINT);
-        $finishedProcess = $this->finished($streamingProcess);
+        $finishedProcess = $this->finishedStreamingProcess($streamingProcess);
 
         self::assertSame(['info-logged', 'info-logged', 'run-returned'], self::linesOf($finishedProcess->output));
         self::assertSame(0, $finishedProcess->exitCode);
@@ -249,7 +249,7 @@ final class StreamingProcessTest extends TestCase
         $killedStreamingProcess = $this->startAStreamingProcess();
         $this->waitUntilTheLocalStoreHoldsAPayload();
         $killedStreamingProcess->signal(SIGKILL);
-        $this->finished($killedStreamingProcess);
+        $this->finishedStreamingProcess($killedStreamingProcess);
 
         $nextStreamingProcess = $this->startAStreamingProcess();
         self::waitUntil(static fn(): bool => count($server->requestsReceivedAt('/server/sse/v1')) === 2);
@@ -354,7 +354,7 @@ final class StreamingProcessTest extends TestCase
         self::assertCount(2, $server->requestsReceivedAt('/server/sse/v1'));
     }
 
-    private function finished(PhpProcess $streamingProcess): FinishedPhpProcess
+    private function finishedStreamingProcess(PhpProcess $streamingProcess): FinishedPhpProcess
     {
         $this->streamingProcesses = array_values(array_filter(
             $this->streamingProcesses,

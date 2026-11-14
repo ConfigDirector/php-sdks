@@ -51,7 +51,11 @@ final readonly class TelemetryLock
     public function addTelemetryOfAClient(string $telemetryFileLine, int $collectingSinceEpochMilliseconds): bool
     {
         $startsTheTally = $this->tally() === null;
-        $firstTally = new StoredTelemetryTally($collectingSinceEpochMilliseconds, 0, 0);
+        $firstTally = new StoredTelemetryTally(
+            $collectingSinceEpochMilliseconds,
+            droppedEvaluations: 0,
+            droppedCapturedContexts: 0,
+        );
         if ($startsTheTally && !$this->tallyFile->replaceContentsWith($firstTally->toJson())) {
             ($this->warnThatTelemetryWasNotKeptIn)($this->tallyFile->path);
 
@@ -90,7 +94,12 @@ final readonly class TelemetryLock
             $tally->droppedCapturedContexts ?? 0,
         );
         $this->telemetryFile->remove();
-        $this->tallyFile->replaceContentsWith((new StoredTelemetryTally($nowEpochMilliseconds, 0, 0))->toJson());
+        $emptyTally = new StoredTelemetryTally(
+            $nowEpochMilliseconds,
+            droppedEvaluations: 0,
+            droppedCapturedContexts: 0,
+        );
+        $this->tallyFile->replaceContentsWith($emptyTally->toJson());
 
         return $storedTelemetry;
     }
@@ -116,8 +125,8 @@ final readonly class TelemetryLock
 
     private function tally(): ?StoredTelemetryTally
     {
-        $json = $this->tallyFile->exists() ? $this->tallyFile->contentsOfAtMost(self::TALLY_MAXIMUM_BYTES) : false;
+        $json = $this->tallyFile->exists() ? $this->tallyFile->contentsOfAtMost(self::TALLY_MAXIMUM_BYTES) : null;
 
-        return $json === false ? null : StoredTelemetryTally::fromJson($json);
+        return $json === null ? null : StoredTelemetryTally::fromJson($json);
     }
 }

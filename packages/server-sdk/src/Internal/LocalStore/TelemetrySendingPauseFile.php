@@ -20,9 +20,9 @@ final readonly class TelemetrySendingPauseFile
 
     public function sendingPause(): ?TelemetrySendingPause
     {
-        $json = $this->file->exists() ? $this->file->contentsOfAtMost(self::MAXIMUM_BYTES) : false;
+        $json = $this->file->exists() ? $this->file->contentsOfAtMost(self::MAXIMUM_BYTES) : null;
 
-        return $json === false ? null : TelemetrySendingPause::fromJson($json);
+        return $json === null ? null : TelemetrySendingPause::fromJson($json);
     }
 
     public function replaceWith(TelemetrySendingPause $sendingPause): bool

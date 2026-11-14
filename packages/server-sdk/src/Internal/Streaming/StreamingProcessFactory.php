@@ -25,17 +25,18 @@ final class StreamingProcessFactory
     private function __construct() {}
 
     public static function streamingProcessOfTheServerSdk(
+        #[\SensitiveParameter]
         ?string $serverSdkKey,
         ?Metadata $metadata,
         ?ConnectionOptions $connectionOptions,
         ?LoggerInterface $logger,
         ?string $logLevel,
-        ?TelemetryOptions $telemetry,
+        ?TelemetryOptions $telemetryOptions,
     ): DefaultStreamingProcess {
         $connectionOptions ??= new ConnectionOptions();
-        $telemetry ??= new TelemetryOptions();
+        $telemetryOptions ??= new TelemetryOptions();
         $logger ??= OptionRules::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
-        OptionRules::rejectUnusableTelemetry($telemetry);
+        OptionRules::rejectUnusableTelemetry($telemetryOptions);
         if ($connectionOptions->mode === ConnectionMode::Offline) {
             throw new ConfigDirectorValidationException(
                 'A streaming process connects to ConfigDirector, so it cannot be created in offline mode.',
@@ -54,7 +55,7 @@ final class StreamingProcessFactory
             $providedServerSdkKey,
             $metadata ?? new Metadata(),
             $connectionOptions,
-            $telemetry,
+            $telemetryOptions,
             $logger,
         );
     }
@@ -65,10 +66,11 @@ final class StreamingProcessFactory
     public static function streamingProcessTimedBy(
         Clock $clock,
         \Closure $randomFraction,
+        #[\SensitiveParameter]
         string $serverSdkKey,
         Metadata $metadata,
         ConnectionOptions $connectionOptions,
-        TelemetryOptions $telemetry,
+        TelemetryOptions $telemetryOptions,
         LoggerInterface $logger,
     ): DefaultStreamingProcess {
         $sdkIdentity = SdkIdentity::ofTheServerSdk();
@@ -79,7 +81,7 @@ final class StreamingProcessFactory
             $localStore,
             new StreamingTransport(
                 new StreamEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
-                $localStoreFedByTheStream->storePayloadReceived(...),
+                $localStoreFedByTheStream,
                 $clock,
                 $randomFraction,
                 $logger,
@@ -87,11 +89,11 @@ final class StreamingProcessFactory
             $localStoreFedByTheStream,
             new EventReporter(
                 new TelemetryEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
-                $telemetry->eventQueueLimit,
+                $telemetryOptions->eventQueueLimit,
                 $clock,
                 $logger,
             ),
-            $telemetry->flushInterval,
+            $telemetryOptions->flushInterval,
             $clock,
             $logger,
         );

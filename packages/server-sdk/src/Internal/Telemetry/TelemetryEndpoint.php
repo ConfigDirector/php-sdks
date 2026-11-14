@@ -20,6 +20,7 @@ final readonly class TelemetryEndpoint
 
     public function __construct(
         string $baseUrl,
+        #[\SensitiveParameter]
         private string $serverSdkKey,
         Metadata $metadata,
         private SdkIdentity $sdkIdentity,

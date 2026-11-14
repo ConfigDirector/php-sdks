@@ -46,11 +46,11 @@ final class ClientLongRunningProcessTest extends TestCase
         );
         $client->initialize();
         $valuesWatched = [];
-        $client->watch('page-size', 10, function (int $value) use (&$valuesWatched): void {
+        $client->watch('page-size', 10, static function (int $value) use (&$valuesWatched): void {
             $valuesWatched[] = $value;
         });
         $updates = [];
-        $client->on('configsUpdated', function (ConfigsUpdatedEvent $update) use (&$updates): void {
+        $client->on('configsUpdated', static function (ConfigsUpdatedEvent $update) use (&$updates): void {
             $updates[] = $update;
         });
 

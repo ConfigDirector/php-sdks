@@ -45,12 +45,12 @@ final class EventHandlers
 
     public function deliverClientReady(): void
     {
-        $this->deliver(ClientEventName::ClientReady, []);
+        $this->deliver(ClientEventName::ClientReady);
     }
 
     public function deliverConfigsUpdated(ConfigsUpdatedEvent $update): void
     {
-        $this->deliver(ClientEventName::ConfigsUpdated, [$update]);
+        $this->deliver(ClientEventName::ConfigsUpdated, $update);
     }
 
     /**
@@ -58,18 +58,15 @@ final class EventHandlers
      */
     public function deliverConfigEvaluated(ConfigEvaluation $evaluation): void
     {
-        $this->deliver(ClientEventName::ConfigEvaluated, [new ConfigEvaluatedEvent($evaluation)]);
+        $this->deliver(ClientEventName::ConfigEvaluated, new ConfigEvaluatedEvent($evaluation));
     }
 
     public function deliverConnectionError(ConfigDirectorConnectionException $error): void
     {
-        $this->deliver(ClientEventName::ConnectionError, [new ConnectionErrorEvent($error)]);
+        $this->deliver(ClientEventName::ConnectionError, new ConnectionErrorEvent($error));
     }
 
-    /**
-     * @param list<object> $arguments
-     */
-    private function deliver(ClientEventName $eventName, array $arguments): void
+    private function deliver(ClientEventName $eventName, object ...$arguments): void
     {
         foreach ($this->handlersByEventName[$eventName->value] ?? [] as $handler) {
             try {

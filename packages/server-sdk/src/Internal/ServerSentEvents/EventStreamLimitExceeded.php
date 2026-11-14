@@ -4,4 +4,6 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\ServerSentEvents;
 
-final class EventStreamLimitExceeded extends \RuntimeException {}
+use ConfigDirector\ConfigDirectorException;
+
+final class EventStreamLimitExceeded extends ConfigDirectorException {}

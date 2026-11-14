@@ -29,13 +29,13 @@ final class ClientContextKindTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'day-of-the-week-config',
-                'Tuesday',
-                'value-tuesday',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                $proDevice,
+                key: 'day-of-the-week-config',
+                value: 'Tuesday',
+                valueId: 'value-tuesday',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: $proDevice,
             ),
             $evaluation,
         );
@@ -60,13 +60,13 @@ final class ClientContextKindTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'day-of-the-week-config',
-                'Monday',
-                'value-monday',
-                null,
-                false,
-                EvaluationReason::FoundMatch,
-                null,
+                key: 'day-of-the-week-config',
+                value: 'Monday',
+                valueId: 'value-monday',
+                variation: null,
+                isDefaultValue: false,
+                reason: EvaluationReason::FoundMatch,
+                context: null,
             ),
             $evaluation,
         );
@@ -100,13 +100,13 @@ final class ClientContextKindTest extends SampleConfigsTestCase
 
         self::assertEquals(
             new ConfigEvaluation(
-                'no-such-config',
-                'fallback',
-                null,
-                null,
-                true,
-                EvaluationReason::ConfigStateMissing,
-                null,
+                key: 'no-such-config',
+                value: 'fallback',
+                valueId: null,
+                variation: null,
+                isDefaultValue: true,
+                reason: EvaluationReason::ConfigStateMissing,
+                context: null,
             ),
             $evaluation,
         );

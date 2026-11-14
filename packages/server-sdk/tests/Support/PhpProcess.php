@@ -6,15 +6,15 @@ namespace ConfigDirector\Tests\Support;
 
 use Composer\Autoload\ClassLoader;
 
-final class PhpProcess
+final readonly class PhpProcess
 {
     /**
      * @param resource $process
      * @param resource $standardOutput
      */
     private function __construct(
-        private readonly mixed $process,
-        private readonly mixed $standardOutput,
+        private mixed $process,
+        private mixed $standardOutput,
     ) {}
 
     /**
@@ -78,9 +78,9 @@ final class PhpProcess
         proc_close($this->process);
 
         return new FinishedPhpProcess(
-            $output === false ? '' : $output,
-            $status['signaled'] ? $status['termsig'] : null,
-            $status['signaled'] ? null : $status['exitcode'],
+            output: $output === false ? '' : $output,
+            terminatingSignal: $status['signaled'] ? $status['termsig'] : null,
+            exitCode: $status['signaled'] ? null : $status['exitcode'],
         );
     }
 

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Tests\Internal\Identity;
 
+use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\Internal\Identity\Wrapper;
 use ConfigDirector\Tests\Support\PhpProcess;
 use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\ScriptedSdkServer;
+use ConfigDirector\Tests\Support\StackTraceArguments;
 use ConfigDirector\Tests\Support\TemporaryFolder;
 use PHPUnit\Framework\TestCase;
 
@@ -84,6 +86,21 @@ final class WrapperTest extends TestCase
         $client->initialize();
 
         self::assertSame('0.0.0-dev', $this->metaContextOfThePoll()['sdkVersion'] ?? null);
+    }
+
+    public function testARejectedUrlKeepsTheServerSdkKeyOutOfTheStackTrace(): void
+    {
+        try {
+            Wrapper::OpenFeatureServerProvider->createClient(
+                serverSdkKey: 'server-sdk-key-to-keep-secret',
+                connection: new ConnectionOptions(url: 'sdk-proxy.example.com'),
+                logger: new RecordingLogger(),
+            );
+            self::fail('createClient() accepted a URL without a scheme.');
+        } catch (ConfigDirectorValidationException $rejectedUrl) {
+        }
+
+        self::assertSame([], StackTraceArguments::holding('server-sdk-key-to-keep-secret', $rejectedUrl));
     }
 
     public function testTheOpenFeatureProviderIsTheOnlyIdentityAWrapperCanReport(): void

@@ -19,7 +19,7 @@ final readonly class ConfigDefinition
     public function __construct(
         public string $id,
         public string $key,
-        public string $type,
+        private string $type,
         public TargetingRules $targetingRules,
         private array $variations = [],
     ) {}
@@ -45,24 +45,29 @@ final readonly class ConfigDefinition
                 "{$idPrefix}{$configKey}",
                 $configKey,
                 $encodedValue->configType,
-                new TargetingRules($encodedValue->servedText, null, null, []),
+                new TargetingRules(
+                    defaultTargetingRuleValue: $encodedValue->servedText,
+                    defaultTargetingRuleValueId: null,
+                    defaultTargetingRuleVariationId: null,
+                    rules: [],
+                ),
             );
         }
 
         return $definitions;
     }
 
-    public function stateServing(ServedValue $served): ConfigState
+    public function stateServing(ServedValue $servedValue): ConfigState
     {
         return new ConfigState(
-            $this->id,
-            $this->key,
-            $this->type,
-            $served->value,
-            $served->valueId,
-            $this->variationWithId($served->variationId),
-            $served->rolloutShare?->ruleId,
-            $served->rolloutShare?->shareId,
+            id: $this->id,
+            key: $this->key,
+            type: $this->type,
+            value: $servedValue->value,
+            valueId: $servedValue->valueId,
+            variation: $this->variationWithId($servedValue->variationId),
+            ruleId: $servedValue->rolloutShare?->ruleId,
+            shareId: $servedValue->rolloutShare?->shareId,
         );
     }
 

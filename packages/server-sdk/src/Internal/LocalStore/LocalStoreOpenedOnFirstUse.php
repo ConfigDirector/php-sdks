@@ -11,6 +11,7 @@ final class LocalStoreOpenedOnFirstUse
     private ?LocalStore $store = null;
 
     public function __construct(
+        #[\SensitiveParameter]
         private readonly string $serverSdkKey,
         private readonly ?string $storagePath,
         private readonly LoggerInterface $logger,

@@ -10,9 +10,9 @@ final readonly class TargetingRules
      * @param list<Rule> $rules
      */
     public function __construct(
-        public string $defaultValue,
-        public ?string $defaultValueId,
-        public ?string $defaultVariationId,
+        public string $defaultTargetingRuleValue,
+        public ?string $defaultTargetingRuleValueId,
+        public ?string $defaultTargetingRuleVariationId,
         public array $rules,
     ) {}
 }

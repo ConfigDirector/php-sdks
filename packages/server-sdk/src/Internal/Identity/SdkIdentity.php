@@ -10,8 +10,8 @@ use ConfigDirector\Version;
 final readonly class SdkIdentity
 {
     private function __construct(
-        public string $sdkName,
-        public string $sdkVersion,
+        private string $sdkName,
+        private string $sdkVersion,
     ) {}
 
     public static function ofTheServerSdk(): self

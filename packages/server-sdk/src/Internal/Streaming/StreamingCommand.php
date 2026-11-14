@@ -19,7 +19,7 @@ final class StreamingCommand
     /**
      * @param array<string, string> $environment
      */
-    public static function exitCodeOfARunWith(array $environment): int
+    public static function exitCodeOfARunWith(#[\SensitiveParameter] array $environment): int
     {
         $serverSdkKey = self::settingNamed('CONFIGDIRECTOR_SERVER_KEY', $environment);
         if ($serverSdkKey === null) {
@@ -72,7 +72,7 @@ final class StreamingCommand
     /**
      * @param array<string, string> $environment
      */
-    private static function settingNamed(string $variable, array $environment): ?string
+    private static function settingNamed(string $variable, #[\SensitiveParameter] array $environment): ?string
     {
         $value = trim($environment[$variable] ?? '');
 

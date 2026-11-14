@@ -506,29 +506,29 @@ final class ClientTelemetryOverTimeTest extends TestCase
         $localStore->store();
 
         return new DefaultConfigDirectorClient(
-            new CloseCountingConnection(new ServerSdkPayload([], []), $whileTheConnectionCloses),
-            new Metadata(),
-            3_000,
-            $this->logger,
-            new EventHandlers($this->logger),
-            new LocalStoreTelemetry(
-                $localStore,
-                new EventReporter(
-                    new TelemetryEndpoint(
+            connection: new CloseCountingConnection(new ServerSdkPayload([], []), $whileTheConnectionCloses),
+            metadata: new Metadata(),
+            timeoutMilliseconds: 3_000,
+            logger: $this->logger,
+            eventHandlers: new EventHandlers($this->logger),
+            telemetry: new LocalStoreTelemetry(
+                localStore: $localStore,
+                eventReporter: new EventReporter(
+                    endpoint: new TelemetryEndpoint(
                         $server->url,
                         'server-sdk-key',
                         new Metadata(),
                         SdkIdentity::ofTheServerSdk(),
                     ),
-                    5_000,
-                    $this->clock,
-                    $this->logger,
+                    eventQueueLimit: 5_000,
+                    clock: $this->clock,
+                    logger: $this->logger,
                 ),
-                5_000,
-                self::FLUSH_INTERVAL_MILLISECONDS,
-                new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),
-                $this->clock,
-                $this->logger,
+                eventQueueLimit: 5_000,
+                flushIntervalMilliseconds: self::FLUSH_INTERVAL_MILLISECONDS,
+                clientLifetime: new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),
+                clock: $this->clock,
+                logger: $this->logger,
             ),
         );
     }

@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace ConfigDirector\Internal\Telemetry;
 
 use ConfigDirector\Context;
+use ConfigDirector\Internal\Evaluation\EvaluationContext;
 
 final readonly class ReportedContext
 {
-    private const string USER_CONTEXT_KIND = 'user';
-
     private const int JSON_FLAGS = JSON_UNESCAPED_SLASHES
         | JSON_UNESCAPED_UNICODE
         | JSON_INVALID_UTF8_SUBSTITUTE
@@ -25,7 +24,9 @@ final readonly class ReportedContext
     {
         $isIdentified = $context !== null && $context->id !== null && $context->id !== '' && !$context->anonymous;
 
-        return $isIdentified ? new self($context->kind ?? self::USER_CONTEXT_KIND, $context->id, $context) : null;
+        return $isIdentified
+            ? new self($context->kind ?? EvaluationContext::USER_CONTEXT_KIND, $context->id, $context)
+            : null;
     }
 
     public function kindAndIdentifier(): string

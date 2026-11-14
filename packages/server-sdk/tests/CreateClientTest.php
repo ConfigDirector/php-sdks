@@ -10,7 +10,9 @@ use ConfigDirector\ConfigDirectorValidationException;
 use ConfigDirector\ConnectionMode;
 use ConfigDirector\ConnectionOptions;
 use ConfigDirector\TelemetryOptions;
+use ConfigDirector\Tests\Support\FailingLogger;
 use ConfigDirector\Tests\Support\RecordingLogger;
+use ConfigDirector\Tests\Support\StackTraceArguments;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\Attributes\RequiresOperatingSystemFamily;
 use PHPUnit\Framework\TestCase;
@@ -46,6 +48,36 @@ final class CreateClientTest extends TestCase
         $this->expectException(ConfigDirectorException::class);
 
         ConfigDirector::createClient(logger: new RecordingLogger());
+    }
+
+    public function testARejectedUrlKeepsTheServerSdkKeyOutOfTheStackTrace(): void
+    {
+        try {
+            ConfigDirector::createClient(
+                serverSdkKey: 'server-sdk-key-to-keep-secret',
+                connection: new ConnectionOptions(url: 'sdk-proxy.example.com'),
+                logger: new RecordingLogger(),
+            );
+            self::fail('createClient() accepted a URL without a scheme.');
+        } catch (ConfigDirectorValidationException $rejectedUrl) {
+        }
+
+        self::assertSame([], StackTraceArguments::holding('server-sdk-key-to-keep-secret', $rejectedUrl));
+    }
+
+    public function testALoggerThatThrowsWhileAClientIsCreatedKeepsTheServerSdkKeyOutOfTheStackTrace(): void
+    {
+        try {
+            ConfigDirector::createClient(
+                serverSdkKey: 'server-sdk-key-to-keep-secret',
+                connection: new ConnectionOptions(pollingInterval: 30),
+                logger: new FailingLogger(),
+            );
+            self::fail('createClient() logged no warning about a polling interval below the minimum.');
+        } catch (\RuntimeException $loggerFailure) {
+        }
+
+        self::assertSame([], StackTraceArguments::holding('server-sdk-key-to-keep-secret', $loggerFailure));
     }
 
     public function testAUrlWithoutASchemeIsRejected(): void
@@ -213,6 +245,20 @@ final class CreateClientTest extends TestCase
             connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['new-checkout' => null]),
             logger: new RecordingLogger(),
         );
+    }
+
+    public function testTheCauseOfARejectedInlineValueIsAConfigDirectorException(): void
+    {
+        try {
+            ConfigDirector::createClient(
+                connection: new ConnectionOptions(mode: ConnectionMode::Offline, values: ['max-items' => INF]),
+                logger: new RecordingLogger(),
+            );
+            self::fail('createClient() accepted an infinite float.');
+        } catch (ConfigDirectorValidationException $rejectedValue) {
+        }
+
+        self::assertInstanceOf(ConfigDirectorException::class, $rejectedValue->getPrevious());
     }
 
     public function testAnInlineValueWithABlankKeyIsRejected(): void

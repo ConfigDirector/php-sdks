@@ -195,7 +195,7 @@ final class InMemoryConnection implements Connection
 
     private function payloadOfTheStoredValues(): ServerSdkPayload
     {
-        return new ServerSdkPayload($this->configs, []);
+        return new ServerSdkPayload($this->configs, segments: []);
     }
 
     /**

@@ -480,23 +480,28 @@ final class ClientInALongRunningProcessTest extends TestCase
         $this->server = ScriptedSdkServer::answering($answersToPolls);
         $logger = $this->logger;
         $transport = new PollingTransport(
-            LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger),
-            new PollingEndpoint($this->server->url, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
-            PollingInterval::ofConfiguredSeconds(60),
-            3_000,
-            new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),
-            $this->clock,
-            $logger,
-            static function (): void {},
-            static function (): void {},
+            store: LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, $logger),
+            endpoint: new PollingEndpoint(
+                $this->server->url,
+                'server-sdk-key',
+                new Metadata(),
+                SdkIdentity::ofTheServerSdk(),
+            ),
+            pollingInterval: PollingInterval::ofConfiguredSeconds(60),
+            timeoutMilliseconds: 3_000,
+            clientLifetime: new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),
+            clock: $this->clock,
+            logger: $logger,
+            reportUnrecoverableError: static function (): void {},
+            reportPayloadReceivedByAPoll: static function (): void {},
         );
         $client = new DefaultConfigDirectorClient(
-            new LocalStoreConnection(static fn(): PollingTransport => $transport, $logger),
-            new Metadata(),
-            3_000,
-            $logger,
-            new EventHandlers($logger),
-            new DiscardedTelemetry(),
+            connection: new LocalStoreConnection(static fn(): PollingTransport => $transport, $logger),
+            metadata: new Metadata(),
+            timeoutMilliseconds: 3_000,
+            logger: $logger,
+            eventHandlers: new EventHandlers($logger),
+            telemetry: new DiscardedTelemetry(),
         );
         $client->initialize();
 

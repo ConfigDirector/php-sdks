@@ -30,7 +30,8 @@ final class ConfigDirector
      * ```
      *
      * @param string|null $serverSdkKey The ConfigDirector server SDK key. This is a secret value,
-     *     do not commit it in your source code. It can be left out in offline mode only.
+     *     do not commit it in your source code. Stack traces show `SensitiveParameterValue` in
+     *     its place. It can be left out in offline mode only.
      * @param Metadata|null $metadata Metadata about your application. Including `appName` and
      *     `appVersion` is recommended, so that you can use them in targeting rules.
      * @param ConnectionOptions|null $connection Connection options.
@@ -52,6 +53,7 @@ final class ConfigDirector
      *     is out of range, or when `$logLevel` is not a PSR-3 level and no `$logger` is given.
      */
     public static function createClient(
+        #[\SensitiveParameter]
         ?string $serverSdkKey = null,
         ?Metadata $metadata = null,
         ?ConnectionOptions $connection = null,
@@ -90,7 +92,8 @@ final class ConfigDirector
      * It makes no network call and touches no file until `run()` is called.
      *
      * @param string|null $serverSdkKey The ConfigDirector server SDK key. This is a secret value,
-     *     do not commit it in your source code.
+     *     do not commit it in your source code. Stack traces show `SensitiveParameterValue` in
+     *     its place.
      * @param Metadata|null $metadata Metadata about your application. The streaming connection and
      *     the telemetry the streaming process sends are shown in ConfigDirector under this
      *     `appName` and `appVersion`, so give it the ones the application's clients have.
@@ -112,6 +115,7 @@ final class ConfigDirector
      *     range, or `$logLevel` is not a PSR-3 level and no `$logger` is given.
      */
     public static function createStreamingProcess(
+        #[\SensitiveParameter]
         ?string $serverSdkKey = null,
         ?Metadata $metadata = null,
         ?ConnectionOptions $connection = null,

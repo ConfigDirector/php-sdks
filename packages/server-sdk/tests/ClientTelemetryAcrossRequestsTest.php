@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * @phpstan-import-type ScriptedAnswer from ScriptedSdkServer
+ * @phpstan-import-type RecordedRequest from \ConfigDirector\Tests\Support\RecordedRequests
  */
 final class ClientTelemetryAcrossRequestsTest extends TestCase
 {
@@ -175,7 +176,7 @@ final class ClientTelemetryAcrossRequestsTest extends TestCase
     }
 
     /**
-     * @return list<array{method: string, path: string, headers: array<string, string>, body: mixed}>
+     * @return list<RecordedRequest>
      */
     private static function telemetryRequestsReceivedBy(ScriptedSdkServer $server): array
     {

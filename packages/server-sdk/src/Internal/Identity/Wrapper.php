@@ -19,6 +19,7 @@ enum Wrapper: string
     case OpenFeatureServerProvider = 'php-openfeature-server-provider';
 
     public function createClient(
+        #[\SensitiveParameter]
         ?string $serverSdkKey = null,
         ?Metadata $metadata = null,
         ?ConnectionOptions $connection = null,

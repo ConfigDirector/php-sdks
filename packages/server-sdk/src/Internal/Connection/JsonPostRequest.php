@@ -16,6 +16,7 @@ final class JsonPostRequest
      */
     public static function to(
         string $url,
+        #[\SensitiveParameter]
         string $jsonBody,
         SdkIdentity $sdkIdentity,
         array $furtherHeaders = [],

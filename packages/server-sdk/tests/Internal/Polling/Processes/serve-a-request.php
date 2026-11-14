@@ -42,25 +42,23 @@ $logger = new class extends AbstractLogger {
 $eventHandlers = new EventHandlers($logger);
 $clock = new SettableClock((int) $nowEpochMilliseconds);
 $transport = new PollingTransport(
-    LocalStore::ofServerSdkKey('server-sdk-key', $storagePath, $logger),
-    new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
-    PollingInterval::ofConfiguredSeconds(60),
-    3_000,
-    new ClientLifetime($clock, 30_000),
-    $clock,
-    $logger,
-    static function (ConfigDirectorConnectionException $error) use ($eventHandlers): void {
-        $eventHandlers->deliverConnectionError($error);
-    },
-    static function (): void {},
+    store: LocalStore::ofServerSdkKey('server-sdk-key', $storagePath, $logger),
+    endpoint: new PollingEndpoint($serverUrl, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
+    pollingInterval: PollingInterval::ofConfiguredSeconds(60),
+    timeoutMilliseconds: 3_000,
+    clientLifetime: new ClientLifetime($clock, 30_000),
+    clock: $clock,
+    logger: $logger,
+    reportUnrecoverableError: $eventHandlers->deliverConnectionError(...),
+    reportPayloadReceivedByAPoll: static function (): void {},
 );
 $client = new DefaultConfigDirectorClient(
-    new LocalStoreConnection(static fn(): PollingTransport => $transport, $logger),
-    new Metadata(),
-    3_000,
-    $logger,
-    $eventHandlers,
-    new DiscardedTelemetry(),
+    connection: new LocalStoreConnection(static fn(): PollingTransport => $transport, $logger),
+    metadata: new Metadata(),
+    timeoutMilliseconds: 3_000,
+    logger: $logger,
+    eventHandlers: $eventHandlers,
+    telemetry: new DiscardedTelemetry(),
 );
 $client->on('connectionError', static function (ConnectionErrorEvent $event): void {
     echo 'connection-error ', $event->error instanceof ConfigDirectorConnectionException ? $event->error->status : '', "\n";

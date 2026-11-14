@@ -6,14 +6,16 @@ namespace ConfigDirector\Internal\LocalStore;
 
 final class SilencedWarnings
 {
+    private function __construct() {}
+
     /**
-     * @template TResult
+     * @template TOutcome
      *
-     * @param \Closure(): TResult $filesystemCall
+     * @param \Closure(): TOutcome $filesystemCall
      *
      * @param-out string|null $lastWarning
      *
-     * @return TResult
+     * @return TOutcome
      */
     public static function during(\Closure $filesystemCall, ?string &$lastWarning = null): mixed
     {

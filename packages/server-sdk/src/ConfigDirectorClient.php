@@ -114,12 +114,15 @@ interface ConfigDirectorClient
      * Each value is evaluated as {@see getValue()} evaluates it and fires `configEvaluated`. A
      * callback that throws is logged at error level and ignored: the other watches still run.
      *
-     * @template TDefaultValue
-     *
      * @param string $configKey The config key to watch.
-     * @param TDefaultValue $defaultValue The in-code default value. Its type decides the type of
-     *     the values the callback receives, as for {@see getValue()}.
-     * @param callable(TDefaultValue): void $callback Called with each value.
+     * @param mixed $defaultValue The in-code default value. Its type decides the type of the
+     *     values the callback receives, as for {@see getValue()}.
+     * @param callable((
+     *     $defaultValue is bool ? bool : (
+     *     $defaultValue is string ? string : (
+     *     $defaultValue is int ? int : (
+     *     $defaultValue is float ? float : array<array-key, mixed>)))
+     * )): void $callback Called with each value.
      * @param Context|null $context The context to evaluate the targeting rules for.
      *
      * @return \Closure(): void A function that removes this watch.

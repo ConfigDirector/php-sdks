@@ -14,7 +14,7 @@ final readonly class PollAnswer
         public array $payload = [],
         public ?int $status = null,
         public string $detail = '',
-        public ?string $retryAfterHeader = null,
+        public ?RetryAfterHeader $retryAfterHeader = null,
     ) {}
 
     /**
@@ -30,7 +30,7 @@ final readonly class PollAnswer
         return new self(PollAnswerKind::Unchanged);
     }
 
-    public static function refused(int $status, string $detail, ?string $retryAfterHeader): self
+    public static function refused(int $status, string $detail, ?RetryAfterHeader $retryAfterHeader): self
     {
         $kind = match (true) {
             $status === 429 => PollAnswerKind::Throttled,

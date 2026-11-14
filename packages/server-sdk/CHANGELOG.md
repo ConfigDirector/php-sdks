@@ -201,6 +201,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   that removes that watch. `unwatch($configKey, $callback)` removes the first watch on the key with
   that callback, or every watch on the key when no callback is given, and `unwatchAll()` removes
   every watch.
+- PHPStan and Psalm see the type of the in-code default value in what a read returns: a `bool`
+  for `getValue('new-checkout', false)`, an `array` for `getValue('theme', [])` and a
+  `ConfigEvaluation<bool>` from `evaluate('new-checkout', false)`. PHPStan also sees it in what a
+  watch's callback receives, a `bool` for `watch('new-checkout', false, ...)`, and reports a
+  callback that declares another type, such as a `string` parameter beside an `int` in-code
+  default value.
 - A handler or watch that throws is logged at error level, with the exception under the PSR-3
   `exception` key, and ignored: the other handlers still run and the read returns its value. The
   default logger ends the line with the exception's class and message.
@@ -210,7 +216,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `logLevel` has no effect when a `logger` is given.
 - `ConfigDirectorException` is the base class of every exception of the SDK, including
   `ConfigDirectorValidationException`, `ConfigDirectorInitializationException` and
-  `ConfigDirectorConnectionException`.
+  `ConfigDirectorConnectionException`. When one of them has a cause in `getPrevious()` that the
+  SDK raised, such as the reason a value cannot be served, that cause is a
+  `ConfigDirectorException` too.
+- The server SDK key is marked `#[\SensitiveParameter]` wherever the SDK passes it on, so the
+  stack trace of an exception, such as a rejected option of `createClient` or
+  `createStreamingProcess`, shows `Object(SensitiveParameterValue)` in its place.
 - `ConfigDirector\Testing\ConfigDirectorTesting::createTestClient(values:, timeout:, logger:)`
   returns a `TestClient`: the SDK's real client, as `$testClient->client`, over an in-memory
   connection that the test controls. It needs no server SDK key, never connects to

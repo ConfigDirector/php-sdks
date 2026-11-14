@@ -23,23 +23,23 @@ final class Rapidhash
 
     private function __construct() {}
 
-    public static function hash(string $data, int $seed): int
+    public static function hash(string $input, int $seed): int
     {
-        $length = strlen($data);
+        $length = strlen($input);
         $seed ^= self::mix($seed ^ self::SECRET[2], self::SECRET[1]);
 
         if ($length <= 16) {
-            [$a, $b] = self::shortInput($data, $length);
+            [$a, $b] = self::shortInput($input, $length);
             if ($length >= 4) {
                 $seed ^= $length;
             }
             $lastBlockLength = $length;
         } else {
-            [$remainderOffset, $seed] = self::blocks($data, $length, $seed);
-            $seed = self::remainderPairs($data, $remainderOffset, $length, $seed);
+            [$remainderOffset, $seed] = self::blocks($input, $length, $seed);
+            $seed = self::remainderPairs($input, $remainderOffset, $length, $seed);
             $lastBlockLength = $length - $remainderOffset;
-            $a = self::read64($data, $length - 16) ^ $lastBlockLength;
-            $b = self::read64($data, $length - 8);
+            $a = self::read64($input, $length - 16) ^ $lastBlockLength;
+            $b = self::read64($input, $length - 8);
         }
 
         return self::epilogue($a ^ self::SECRET[1], $b ^ $seed, $lastBlockLength);
@@ -48,19 +48,18 @@ final class Rapidhash
     /**
      * @return array{int, int}
      */
-    private static function shortInput(string $data, int $length): array
+    private static function shortInput(string $input, int $length): array
     {
         if ($length >= 8) {
-            return [self::read64($data, 0), self::read64($data, $length - 8)];
+            return [self::read64($input, 0), self::read64($input, $length - 8)];
         }
         if ($length >= 4) {
-            return [self::read32($data, 0), self::read32($data, $length - 4)];
+            return [self::read32($input, 0), self::read32($input, $length - 4)];
         }
         if ($length > 0) {
-            $first = ord($data[0]);
-            $a = ord($data[$length - 1]) | ((($first << 5) & 0xFF) << 40) | (($first >> 3) << 48);
+            $a = (ord($input[0]) << 45) | ord($input[$length - 1]);
 
-            return [$a, ord($data[$length >> 1])];
+            return [$a, ord($input[$length >> 1])];
         }
 
         return [0, 0];
@@ -69,7 +68,7 @@ final class Rapidhash
     /**
      * @return array{int, int}
      */
-    private static function blocks(string $data, int $length, int $seed): array
+    private static function blocks(string $input, int $length, int $seed): array
     {
         if ($length <= self::BLOCK_LENGTH) {
             return [0, $seed];
@@ -81,8 +80,8 @@ final class Rapidhash
             foreach ($lanes as $lane => $laneSeed) {
                 $laneOffset = $offset + $lane * 16;
                 $lanes[$lane] = self::mix(
-                    self::read64($data, $laneOffset) ^ self::SECRET[$lane],
-                    self::read64($data, $laneOffset + 8) ^ $laneSeed,
+                    self::read64($input, $laneOffset) ^ self::SECRET[$lane],
+                    self::read64($input, $laneOffset + 8) ^ $laneSeed,
                 );
             }
             $offset += self::BLOCK_LENGTH;
@@ -91,7 +90,7 @@ final class Rapidhash
         return [$offset, array_reduce($lanes, static fn(int $folded, int $lane): int => $folded ^ $lane, 0)];
     }
 
-    private static function remainderPairs(string $data, int $offset, int $length, int $seed): int
+    private static function remainderPairs(string $input, int $offset, int $length, int $seed): int
     {
         foreach (self::REMAINDER_PAIR_SECRETS as $pair => $secret) {
             $pairOffset = $offset + $pair * 16;
@@ -99,8 +98,8 @@ final class Rapidhash
                 break;
             }
             $seed = self::mix(
-                self::read64($data, $pairOffset) ^ self::SECRET[$secret],
-                self::read64($data, $pairOffset + 8) ^ $seed,
+                self::read64($input, $pairOffset) ^ self::SECRET[$secret],
+                self::read64($input, $pairOffset + 8) ^ $seed,
             );
         }
 
@@ -154,16 +153,16 @@ final class Rapidhash
         return [$value & 0xFFFF, ($value >> 16) & 0xFFFF, ($value >> 32) & 0xFFFF, ($value >> 48) & 0xFFFF];
     }
 
-    private static function read64(string $data, int $offset): int
+    private static function read64(string $input, int $offset): int
     {
-        return self::read32($data, $offset) | self::read32($data, $offset + 4) << 32;
+        return self::read32($input, $offset) | self::read32($input, $offset + 4) << 32;
     }
 
-    private static function read32(string $data, int $offset): int
+    private static function read32(string $input, int $offset): int
     {
-        return ord($data[$offset])
-            | ord($data[$offset + 1]) << 8
-            | ord($data[$offset + 2]) << 16
-            | ord($data[$offset + 3]) << 24;
+        return ord($input[$offset])
+            | ord($input[$offset + 1]) << 8
+            | ord($input[$offset + 2]) << 16
+            | ord($input[$offset + 3]) << 24;
     }
 }

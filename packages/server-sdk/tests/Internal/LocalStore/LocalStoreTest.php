@@ -466,13 +466,25 @@ final class LocalStoreTest extends TestCase
 
         $isRecorded = $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 3_601_000,
+                pollFailed: true,
+                refusalStatus: 401,
+            ),
         );
         $refreshLock->release();
 
         self::assertTrue($isRecorded);
         self::assertEquals(
-            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 3_601_000,
+                pollFailed: true,
+                refusalStatus: 401,
+            ),
             LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger())
                 ->pollingPause('https://sdk.example.com/server/polling/v1'),
         );
@@ -486,12 +498,24 @@ final class LocalStoreTest extends TestCase
 
         $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 61_000, false, null),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
         );
         $refreshLock->release();
 
         self::assertEquals(
-            new PollingPause('session-1', 1_000, 61_000, false, null),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
             $store->pollingPause('https://sdk.example.com/server/polling/v1'),
         );
     }
@@ -504,7 +528,13 @@ final class LocalStoreTest extends TestCase
 
         $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 61_000, true, 503),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: true,
+                refusalStatus: 503,
+            ),
         );
         $refreshLock->release();
 
@@ -518,21 +548,45 @@ final class LocalStoreTest extends TestCase
         self::assertNotNull($refreshLock);
         $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 3_601_000,
+                pollFailed: true,
+                refusalStatus: 401,
+            ),
         );
 
         $refreshLock->recordPollingPause(
             'https://proxy.example.com/server/polling/v1',
-            new PollingPause('session-1', 2_000, 62_000, true, 503),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 2_000,
+                untilEpochMilliseconds: 62_000,
+                pollFailed: true,
+                refusalStatus: 503,
+            ),
         );
         $refreshLock->release();
 
         self::assertEquals(
-            new PollingPause('session-1', 1_000, 3_601_000, true, 401),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 3_601_000,
+                pollFailed: true,
+                refusalStatus: 401,
+            ),
             $store->pollingPause('https://sdk.example.com/server/polling/v1'),
         );
         self::assertEquals(
-            new PollingPause('session-1', 2_000, 62_000, true, 503),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 2_000,
+                untilEpochMilliseconds: 62_000,
+                pollFailed: true,
+                refusalStatus: 503,
+            ),
             $store->pollingPause('https://proxy.example.com/server/polling/v1'),
         );
     }
@@ -620,7 +674,13 @@ final class LocalStoreTest extends TestCase
 
         $isRecorded = $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 61_000, false, null),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
         );
 
         self::assertFalse($isRecorded);
@@ -635,7 +695,13 @@ final class LocalStoreTest extends TestCase
 
         $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 61_000, false, null),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
         );
         $refreshLock->release();
 
@@ -656,7 +722,13 @@ final class LocalStoreTest extends TestCase
 
         $refreshLock->recordPollingPause(
             'https://sdk.example.com/server/polling/v1',
-            new PollingPause('session-1', 1_000, 61_000, false, null),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
         );
     }
 
@@ -669,7 +741,13 @@ final class LocalStoreTest extends TestCase
             static function (int $remainingMilliseconds, RefreshLock $refreshLock): null {
                 $refreshLock->recordPollingPause(
                     'https://sdk.example.com/server/polling/v1',
-                    new PollingPause('session-1', 1_000, 61_000, false, null),
+                    new PollingPause(
+                        sessionId: 'session-1',
+                        recordedAtEpochMilliseconds: 1_000,
+                        untilEpochMilliseconds: 61_000,
+                        pollFailed: false,
+                        refusalStatus: null,
+                    ),
                 );
 
                 return null;
@@ -677,7 +755,13 @@ final class LocalStoreTest extends TestCase
         );
 
         self::assertEquals(
-            new PollingPause('session-1', 1_000, 61_000, false, null),
+            new PollingPause(
+                sessionId: 'session-1',
+                recordedAtEpochMilliseconds: 1_000,
+                untilEpochMilliseconds: 61_000,
+                pollFailed: false,
+                refusalStatus: null,
+            ),
             $store->pollingPause('https://sdk.example.com/server/polling/v1'),
         );
     }
