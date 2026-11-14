@@ -396,6 +396,7 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         $this->expectException(ConfigDirectorValidationException::class);
 
+        // @phpstan-ignore argument.type
         $client->getValue('integer-config', null);
     }
 
@@ -405,6 +406,7 @@ final class ClientReadsTest extends SampleConfigsTestCase
 
         $this->expectException(ConfigDirectorValidationException::class);
 
+        // @phpstan-ignore argument.type
         $client->evaluate('json-value-config', new \stdClass());
     }
 

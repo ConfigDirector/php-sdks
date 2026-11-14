@@ -83,6 +83,7 @@ final class ClientWatchesTest extends SampleConfigsTestCase
 
         $this->expectException(ConfigDirectorValidationException::class);
 
+        // @phpstan-ignore argument.type
         $client->watch('day-of-the-week-config', null, static function (): void {});
     }
 

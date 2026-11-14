@@ -206,7 +206,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `ConfigEvaluation<bool>` from `evaluate('new-checkout', false)`. PHPStan also sees it in what a
   watch's callback receives, a `bool` for `watch('new-checkout', false, ...)`, and reports a
   callback that declares another type, such as a `string` parameter beside an `int` in-code
-  default value.
+  default value. Both report an in-code default value that a read would reject, such as `null` or
+  an object, where it is passed.
 - A handler or watch that throws is logged at error level, with the exception under the PSR-3
   `exception` key, and ignored: the other handlers still run and the read returns its value. The
   default logger ends the line with the exception's class and message.

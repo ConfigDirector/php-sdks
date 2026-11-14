@@ -45,11 +45,11 @@ interface ConfigDirectorClient
      * has an `id` and is not anonymous.
      *
      * @param string $configKey The config key to evaluate.
-     * @param mixed $defaultValue The in-code default value, returned when no value from
-     *     ConfigDirector can be served: for example before the client is ready, when no config has
-     *     the key, or when the config's value cannot be read as the type of this value. Its type
-     *     decides the type of the value returned: a `bool`, a `string`, an `int`, a `float`, or an
-     *     array for a JSON config.
+     * @param bool|string|int|float|array<array-key, mixed> $defaultValue The in-code default
+     *     value, returned when no value from ConfigDirector can be served: for example before the
+     *     client is ready, when no config has the key, or when the config's value cannot be read
+     *     as the type of this value. Its type decides the type of the value returned: a `bool`, a
+     *     `string`, an `int`, a `float`, or an array for a JSON config.
      * @param Context|null $context The context to evaluate the targeting rules for.
      *
      * @return (
@@ -73,8 +73,9 @@ interface ConfigDirectorClient
      * reason it was served, its value ID and its variation.
      *
      * @param string $configKey The config key to evaluate.
-     * @param mixed $defaultValue The in-code default value, returned when no value from
-     *     ConfigDirector can be served. Its type decides the type of the value returned.
+     * @param bool|string|int|float|array<array-key, mixed> $defaultValue The in-code default
+     *     value, returned when no value from ConfigDirector can be served. Its type decides the
+     *     type of the value returned.
      * @param Context|null $context The context to evaluate the targeting rules for.
      *
      * @return ConfigEvaluation<(
@@ -115,8 +116,9 @@ interface ConfigDirectorClient
      * callback that throws is logged at error level and ignored: the other watches still run.
      *
      * @param string $configKey The config key to watch.
-     * @param mixed $defaultValue The in-code default value. Its type decides the type of the
-     *     values the callback receives, as for {@see getValue()}.
+     * @param bool|string|int|float|array<array-key, mixed> $defaultValue The in-code default
+     *     value. Its type decides the type of the values the callback receives, as for
+     *     {@see getValue()}.
      * @param callable((
      *     $defaultValue is bool ? bool : (
      *     $defaultValue is string ? string : (
