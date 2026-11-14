@@ -22,7 +22,7 @@ final class RecordedRequests
      */
     public static function in(string $requestsFile): array
     {
-        $recordedText = is_file($requestsFile) ? (string) file_get_contents($requestsFile) : '';
+        $recordedText = self::textReadWhileNoRequestIsBeingRecordedIn($requestsFile);
         $endOfTheLastFinishedLine = strrpos($recordedText, "\n");
         if ($endOfTheLastFinishedLine === false) {
             return [];
@@ -54,5 +54,22 @@ final class RecordedRequests
         }
 
         return $requests;
+    }
+
+    private static function textReadWhileNoRequestIsBeingRecordedIn(string $requestsFile): string
+    {
+        $openedRequestsFile = is_file($requestsFile) ? fopen($requestsFile, 'rb') : false;
+        if ($openedRequestsFile === false) {
+            return '';
+        }
+
+        try {
+            flock($openedRequestsFile, LOCK_SH);
+
+            return (string) stream_get_contents($openedRequestsFile);
+        } finally {
+            flock($openedRequestsFile, LOCK_UN);
+            fclose($openedRequestsFile);
+        }
     }
 }
