@@ -78,7 +78,7 @@ final class LineLogger extends AbstractLogger
     private static function exceptionTextOf(mixed $exception): string
     {
         return $exception instanceof \Throwable
-            ? sprintf(' %s: %s', $exception::class, self::onOneLine($exception->getMessage()))
+            ? sprintf(' %s: %s', $exception::class, self::withControlCharactersAsSpaces($exception->getMessage()))
             : '';
     }
 
@@ -89,7 +89,7 @@ final class LineLogger extends AbstractLogger
     {
         $textByPlaceholder = [];
         foreach ($context as $name => $value) {
-            $textByPlaceholder['{' . $name . '}'] = self::onOneLine(self::textOf($value));
+            $textByPlaceholder['{' . $name . '}'] = self::withControlCharactersAsSpaces(self::textOf($value));
         }
 
         return strtr($message, $textByPlaceholder);
@@ -106,8 +106,8 @@ final class LineLogger extends AbstractLogger
         return $json === false ? get_debug_type($value) : $json;
     }
 
-    private static function onOneLine(string $text): string
+    private static function withControlCharactersAsSpaces(string $text): string
     {
-        return strtr($text, ["\r" => ' ', "\n" => ' ']);
+        return preg_replace('/[\x00-\x1F\x7F]/', ' ', $text) ?? '';
     }
 }

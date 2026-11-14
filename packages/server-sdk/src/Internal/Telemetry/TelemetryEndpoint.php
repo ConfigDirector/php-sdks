@@ -6,6 +6,7 @@ namespace ConfigDirector\Internal\Telemetry;
 
 use ConfigDirector\Internal\Connection\JsonPostRequest;
 use ConfigDirector\Internal\Identity\SdkIdentity;
+use ConfigDirector\Internal\Identity\ServerSdkKey;
 use ConfigDirector\Metadata;
 
 final readonly class TelemetryEndpoint
@@ -18,22 +19,25 @@ final readonly class TelemetryEndpoint
     /** @var array<string, string> */
     private array $metaContext;
 
+    private ServerSdkKey $serverSdkKey;
+
     public function __construct(
         string $baseUrl,
         #[\SensitiveParameter]
-        private string $serverSdkKey,
+        string $serverSdkKey,
         Metadata $metadata,
         private SdkIdentity $sdkIdentity,
     ) {
         $this->url = rtrim($baseUrl, '/') . '/server/telemetry/v1';
         $this->metaContext = $sdkIdentity->metaContextOfAnApplicationWith($metadata);
+        $this->serverSdkKey = new ServerSdkKey($serverSdkKey);
     }
 
     public function answerToAReportOf(CollectedTelemetry $telemetry, int $reportedAtEpochMilliseconds): ReportAnswer
     {
         $request = JsonPostRequest::to(
             $this->url,
-            $telemetry->reportJson($this->serverSdkKey, $this->metaContext, $reportedAtEpochMilliseconds),
+            $telemetry->reportJson($this->serverSdkKey->text(), $this->metaContext, $reportedAtEpochMilliseconds),
             $this->sdkIdentity,
         );
         curl_setopt_array($request, [

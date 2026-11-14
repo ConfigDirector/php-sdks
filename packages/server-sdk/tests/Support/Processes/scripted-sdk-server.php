@@ -5,13 +5,14 @@ declare(strict_types=1);
 if (!isset($argv)) {
     throw new RuntimeException('This script takes its arguments from the command line.');
 }
-[, , $answersJson, $requestsFile, $fileForASelfSignedCertificate] = $argv;
+[, , $answersJson, $requestsFile, $fileForASelfSignedCertificate, $answerOnceTheScriptHasRunOutJson] = $argv;
 
 set_error_handler(static fn(): bool => true);
 
 $answers = json_decode($answersJson, true, flags: JSON_THROW_ON_ERROR);
-if (!is_array($answers)) {
-    throw new RuntimeException('The scripted answers must be a JSON array.');
+$answerOnceTheScriptHasRunOut = json_decode($answerOnceTheScriptHasRunOutJson, true, flags: JSON_THROW_ON_ERROR);
+if (!is_array($answers) || !is_array($answerOnceTheScriptHasRunOut)) {
+    throw new RuntimeException('The scripted answers must be a JSON array and a JSON object.');
 }
 
 if ($fileForASelfSignedCertificate === '') {
@@ -106,7 +107,7 @@ for (;;) {
 
     $answer = array_shift($answers);
     if (!is_array($answer)) {
-        $answer = ['status' => 500, 'body' => 'The scripted SDK server has no answer left.'];
+        $answer = $answerOnceTheScriptHasRunOut;
     }
     $delayMilliseconds = $answer['delayMilliseconds'] ?? 0;
     usleep((is_int($delayMilliseconds) ? $delayMilliseconds : 0) * 1_000);

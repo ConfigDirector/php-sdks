@@ -42,7 +42,11 @@ final readonly class TelemetrySendingPause
         $until = $fileContents['until'] ?? null;
         $refusalStatus = $fileContents['refusalStatus'] ?? null;
 
-        return is_int($recordedAt) && is_int($until) && ($refusalStatus === null || is_int($refusalStatus))
+        $isWhatTheSdkStores = StoredNumber::isEpochMilliseconds($recordedAt)
+            && StoredNumber::isEpochMilliseconds($until)
+            && ($refusalStatus === null || is_int($refusalStatus));
+
+        return $isWhatTheSdkStores
             ? new self($recordedAt, $until, $refusalStatus)
             : null;
     }

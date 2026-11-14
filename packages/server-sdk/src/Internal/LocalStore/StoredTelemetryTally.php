@@ -35,7 +35,11 @@ final readonly class StoredTelemetryTally
         $droppedEvaluations = $fileContents['droppedEvaluations'] ?? null;
         $droppedCapturedContexts = $fileContents['droppedCapturedContexts'] ?? null;
 
-        return is_int($collectingSince) && is_int($droppedEvaluations) && is_int($droppedCapturedContexts)
+        $isWhatTheSdkStores = StoredNumber::isEpochMilliseconds($collectingSince)
+            && StoredNumber::isCount($droppedEvaluations)
+            && StoredNumber::isCount($droppedCapturedContexts);
+
+        return $isWhatTheSdkStores
             ? new self($collectingSince, $droppedEvaluations, $droppedCapturedContexts)
             : null;
     }

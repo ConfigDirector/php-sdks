@@ -14,8 +14,14 @@ foreach ($autoloadFiles as $autoloadFile) {
     if (is_file($autoloadFile)) {
         require $autoloadFile;
 
-        break;
+        exit(StreamingCommand::exitCodeOfARunWith(getenv()));
     }
 }
 
-exit(StreamingCommand::exitCodeOfARunWith(getenv()));
+fwrite(
+    STDERR,
+    "configdirector-stream found no Composer autoloader. Run it as vendor/bin/configdirector-stream in an "
+    . "application that requires configdirector/server-sdk.\n",
+);
+
+exit(1);

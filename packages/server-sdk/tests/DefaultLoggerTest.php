@@ -119,6 +119,19 @@ final class DefaultLoggerTest extends SampleConfigsTestCase
         $client->getValue('integer-config', 10, new Context(id: 'device-1', kind: "Device\r\nforged line"));
     }
 
+    public function testAnEscapeCharacterAndANulByteInAnInvalidKindAreWrittenAsSpaces(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex('/^[^\x00-\x1F\x7F]*Device \[2J rest of the kind[^\x00-\x1F\x7F]*\R$/');
+
+        $client->getValue('integer-config', 10, new Context(id: 'device-1', kind: "Device\e[2J\0rest of the kind"));
+    }
+
     public function testAnErrorEndsWithTheClassAndMessageOfItsException(): void
     {
         $client = ConfigDirector::createClient(

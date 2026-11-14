@@ -49,8 +49,8 @@ final readonly class PollingPause
         $refusalStatus = $fileContents['refusalStatus'] ?? null;
         $hasEveryField = is_string($sessionId)
             && $sessionId !== ''
-            && is_int($recordedAt)
-            && is_int($until)
+            && StoredNumber::isEpochMilliseconds($recordedAt)
+            && StoredNumber::isEpochMilliseconds($until)
             && is_bool($pollFailed)
             && ($refusalStatus === null || is_int($refusalStatus));
 

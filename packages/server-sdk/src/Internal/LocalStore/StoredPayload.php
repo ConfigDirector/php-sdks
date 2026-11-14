@@ -95,10 +95,11 @@ final readonly class StoredPayload
         $confirmedFreshAt = $fileContents['confirmedFreshAt'] ?? null;
         $sessionId = $fileContents['sessionId'] ?? null;
         $isAServerSdkPayload = is_array($payload) && self::holdsAConfigsObject($payload);
-        if (!$isAServerSdkPayload || !is_int($confirmedFreshAt) || !is_string($sessionId) || $sessionId === '') {
-            return null;
-        }
+        $isWhatTheSdkStores = $isAServerSdkPayload
+            && StoredNumber::isEpochMilliseconds($confirmedFreshAt)
+            && is_string($sessionId)
+            && $sessionId !== '';
 
-        return new self($payload, $confirmedFreshAt, $sessionId);
+        return $isWhatTheSdkStores ? new self($payload, $confirmedFreshAt, $sessionId) : null;
     }
 }

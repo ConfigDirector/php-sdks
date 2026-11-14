@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Telemetry;
 
+use ConfigDirector\Internal\LocalStore\StoredNumber;
+
 final class CollectedTelemetry
 {
     private const int JSON_FLAGS = JSON_THROW_ON_ERROR
@@ -131,7 +133,7 @@ final class CollectedTelemetry
         }
 
         $collectingSince = $telemetryOfAClient['collectingSince'] ?? null;
-        if (!is_int($collectingSince)) {
+        if (!StoredNumber::isEpochMilliseconds($collectingSince)) {
             return;
         }
 
@@ -227,7 +229,7 @@ final class CollectedTelemetry
     {
         $counts = [];
         foreach (is_array($countsByText) ? $countsByText : [] as $text => $count) {
-            if (is_int($count) && $count > 0) {
+            if (StoredNumber::isCount($count) && $count > 0) {
                 $counts[$text] = $count;
             }
         }
@@ -240,7 +242,7 @@ final class CollectedTelemetry
      */
     private static function positiveCountOrZero(mixed $count): int
     {
-        return is_int($count) && $count > 0 ? $count : 0;
+        return StoredNumber::isCount($count) ? $count : 0;
     }
 
     private static function isAJsonObject(string $text): bool

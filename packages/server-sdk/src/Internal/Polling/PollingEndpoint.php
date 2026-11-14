@@ -8,6 +8,7 @@ use ConfigDirector\Internal\Connection\JsonPostRequest;
 use ConfigDirector\Internal\Connection\RefusalDetail;
 use ConfigDirector\Internal\Connection\ServerSdkPayloadText;
 use ConfigDirector\Internal\Identity\SdkIdentity;
+use ConfigDirector\Internal\Identity\ServerSdkKey;
 use ConfigDirector\Metadata;
 
 final readonly class PollingEndpoint
@@ -20,15 +21,18 @@ final readonly class PollingEndpoint
     /** @var array<string, string> */
     private array $metaContext;
 
+    private ServerSdkKey $serverSdkKey;
+
     public function __construct(
         string $baseUrl,
         #[\SensitiveParameter]
-        private string $serverSdkKey,
+        string $serverSdkKey,
         Metadata $metadata,
         private SdkIdentity $sdkIdentity,
     ) {
         $this->url = rtrim($baseUrl, '/') . '/server/polling/v1';
         $this->metaContext = $sdkIdentity->metaContextOfAnApplicationWith($metadata);
+        $this->serverSdkKey = new ServerSdkKey($serverSdkKey);
     }
 
     public function answerToAPoll(
@@ -86,7 +90,7 @@ final readonly class PollingEndpoint
             204 => PollAnswer::unchanged(),
             default => PollAnswer::refused(
                 $status,
-                RefusalDetail::in($responseBody, $this->serverSdkKey),
+                RefusalDetail::in($responseBody, $this->serverSdkKey->text()),
                 $retryAfterHeader,
             ),
         };
@@ -97,7 +101,7 @@ final readonly class PollingEndpoint
         return json_encode(
             array_filter(
                 [
-                    'serverSdkKey' => $this->serverSdkKey,
+                    'serverSdkKey' => $this->serverSdkKey->text(),
                     'sessionId' => $sessionId,
                     'metaContext' => $this->metaContext,
                     'lastUpdateTimestamp' => $lastUpdateTimestamp,

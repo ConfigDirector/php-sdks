@@ -40,25 +40,37 @@ final readonly class ScriptedSdkServer
     }
 
     /**
-     * @param list<ScriptedAnswer> $answersInOrder
+     * @param ScriptedAnswer $answer
      */
-    private static function started(array $answersInOrder, bool $answersOverTlsWithASelfSignedCertificate): self
+    public static function answeringEveryRequestWith(array $answer): self
     {
-        $answersWithEncodedBodies = [];
-        foreach ($answersInOrder as $answer) {
-            if (is_array($answer['body'] ?? null)) {
-                $answer['body'] = json_encode($answer['body'], JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-            }
-            $answersWithEncodedBodies[] = $answer;
-        }
+        return self::started(
+            answersInOrder: [],
+            answersOverTlsWithASelfSignedCertificate: false,
+            answerOnceTheScriptHasRunOut: $answer,
+        );
+    }
 
+    /**
+     * @param list<ScriptedAnswer> $answersInOrder
+     * @param ScriptedAnswer $answerOnceTheScriptHasRunOut
+     */
+    private static function started(
+        array $answersInOrder,
+        bool $answersOverTlsWithASelfSignedCertificate,
+        array $answerOnceTheScriptHasRunOut = [
+            'status' => 500,
+            'body' => 'The scripted SDK server has no answer left.',
+        ],
+    ): self {
         $folder = TemporaryFolder::create();
         $process = PhpProcess::running(
             __DIR__ . '/Processes/scripted-sdk-server.php',
             [
-                json_encode($answersWithEncodedBodies, JSON_THROW_ON_ERROR),
+                json_encode(array_map(self::withItsBodyAsText(...), $answersInOrder), JSON_THROW_ON_ERROR),
                 self::requestsFileIn($folder),
                 $answersOverTlsWithASelfSignedCertificate ? $folder . DIRECTORY_SEPARATOR . 'certificate.pem' : '',
+                json_encode(self::withItsBodyAsText($answerOnceTheScriptHasRunOut), JSON_THROW_ON_ERROR),
             ],
         );
         $address = $process->nextLineOfOutput();
@@ -88,6 +100,20 @@ final readonly class ScriptedSdkServer
     {
         $this->process->stop();
         TemporaryFolder::remove($this->folder);
+    }
+
+    /**
+     * @param ScriptedAnswer $answer
+     *
+     * @return ScriptedAnswer
+     */
+    private static function withItsBodyAsText(array $answer): array
+    {
+        if (is_array($answer['body'] ?? null)) {
+            $answer['body'] = json_encode($answer['body'], JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+        }
+
+        return $answer;
     }
 
     private static function requestsFileIn(string $folder): string

@@ -150,12 +150,13 @@ final class ClientFactory
         $clock = new SystemClock();
         $clientLifetime = new ClientLifetime($clock, $telemetryOptions->flushInterval);
         $localStore = new LocalStoreOpenedOnFirstUse($serverSdkKey, $connectionOptions->storagePath, $logger);
+        $pollingEndpoint = new PollingEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity);
 
         return [
             new LocalStoreConnection(
                 static fn(\Closure $reportPayloadReceivedByAPoll): PollingTransport => new PollingTransport(
                     $localStore->store(),
-                    new PollingEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
+                    $pollingEndpoint,
                     $pollingInterval,
                     $connectionOptions->timeout,
                     $clientLifetime,

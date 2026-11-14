@@ -240,6 +240,54 @@ final class StreamingProcessTest extends TestCase
     }
 
     #[RequiresPhpExtension('pcntl')]
+    public function testSigtermEndsAStreamingProcessWhosePhpHasNoFunctionToDispatchSignals(): void
+    {
+        $this->serverStreaming([
+            ['chunks' => [ScriptedStreamServer::eventCarrying(self::fullPayloadOf(self::PAGE_SIZE_OF_25))]],
+        ]);
+        $streamingProcess = $this->startAStreamingProcess(['disable_functions' => 'pcntl_signal_dispatch']);
+        $this->waitUntilTheLocalStoreHoldsAPayload();
+
+        $streamingProcess->signal(SIGTERM);
+        self::waitUntil(static fn(): bool => !$streamingProcess->isRunning());
+        $finishedProcess = $this->finishedStreamingProcess($streamingProcess);
+
+        self::assertSame(['info-logged'], self::linesOf($finishedProcess->output));
+    }
+
+    #[RequiresPhpExtension('pcntl')]
+    public function testSigtermEndsAStreamingProcessWhosePhpHasNoFunctionToHandleSignals(): void
+    {
+        $this->serverStreaming([
+            ['chunks' => [ScriptedStreamServer::eventCarrying(self::fullPayloadOf(self::PAGE_SIZE_OF_25))]],
+        ]);
+        $streamingProcess = $this->startAStreamingProcess(['disable_functions' => 'pcntl_signal']);
+        $this->waitUntilTheLocalStoreHoldsAPayload();
+
+        $streamingProcess->signal(SIGTERM);
+        self::waitUntil(static fn(): bool => !$streamingProcess->isRunning());
+        $finishedProcess = $this->finishedStreamingProcess($streamingProcess);
+
+        self::assertSame(['info-logged'], self::linesOf($finishedProcess->output));
+    }
+
+    #[RequiresPhpExtension('pcntl')]
+    public function testAStreamingProcessWhosePhpHasNoFunctionToReadASignalHandlerRunsUntilSigtermEndsIt(): void
+    {
+        $this->serverStreaming([
+            ['chunks' => [ScriptedStreamServer::eventCarrying(self::fullPayloadOf(self::PAGE_SIZE_OF_25))]],
+        ]);
+        $streamingProcess = $this->startAStreamingProcess(['disable_functions' => 'pcntl_signal_get_handler']);
+        $this->waitUntilTheLocalStoreHoldsAPayload();
+
+        $streamingProcess->signal(SIGTERM);
+        self::waitUntil(static fn(): bool => !$streamingProcess->isRunning());
+        $finishedProcess = $this->finishedStreamingProcess($streamingProcess);
+
+        self::assertSame(['info-logged'], self::linesOf($finishedProcess->output));
+    }
+
+    #[RequiresPhpExtension('pcntl')]
     public function testAStreamingProcessStartsOnALocalStoreWhoseStreamingProcessWasKilled(): void
     {
         $server = $this->serverStreaming([
@@ -380,11 +428,15 @@ final class StreamingProcessTest extends TestCase
         return $this->server = ScriptedStreamServer::streaming($streamsInOrder);
     }
 
-    private function startAStreamingProcess(): PhpProcess
+    /**
+     * @param array<string, string> $phpSettings
+     */
+    private function startAStreamingProcess(array $phpSettings = []): PhpProcess
     {
         return $this->streamingProcesses[] = PhpProcess::running(
             __DIR__ . '/Processes/run-a-streaming-process.php',
             [$this->storagePath, $this->server->url ?? '', '30000'],
+            $phpSettings,
         );
     }
 

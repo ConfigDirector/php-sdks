@@ -6,7 +6,9 @@ namespace ConfigDirector\Internal\LocalStore;
 
 final class ExclusiveFileLock
 {
-    private const int PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS = 5_000;
+    private const int LONGEST_PAUSE_AFTER_THE_FIRST_ATTEMPT_MICROSECONDS = 250;
+
+    private const int LONGEST_PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS = 1_000;
 
     /**
      * @param resource|null $lockFile
@@ -26,6 +28,7 @@ final class ExclusiveFileLock
         }
 
         $deadline = hrtime(true) + $timeoutMilliseconds * 1_000_000;
+        $longestPauseMicroseconds = self::LONGEST_PAUSE_AFTER_THE_FIRST_ATTEMPT_MICROSECONDS;
         while (!flock($lockFile, LOCK_EX | LOCK_NB, $isHeldByAnotherProcess)) {
             if ($isHeldByAnotherProcess !== 1) {
                 fclose($lockFile);
@@ -38,7 +41,11 @@ final class ExclusiveFileLock
                 return UnacquiredFileLock::HeldPastTheTimeout;
             }
 
-            usleep(self::PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS);
+            usleep(random_int(intdiv($longestPauseMicroseconds, 2), $longestPauseMicroseconds));
+            $longestPauseMicroseconds = min(
+                2 * $longestPauseMicroseconds,
+                self::LONGEST_PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS,
+            );
         }
 
         return new self($lockFile);

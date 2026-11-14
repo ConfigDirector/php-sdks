@@ -23,7 +23,7 @@ final class StreamAnswer
 
     private int $bodyBytesReceived = 0;
 
-    private ?EventStreamLimitExceeded $limitExceeded = null;
+    private ?string $messageOfTheLimitExceeded = null;
 
     private readonly ReceivedEvents $receivedEvents;
 
@@ -71,7 +71,7 @@ final class StreamAnswer
             );
         }
 
-        return StreamEnd::dropped($this->limitExceeded?->getMessage() ?? $cause, $this->parser->retryMilliseconds());
+        return StreamEnd::dropped($this->messageOfTheLimitExceeded ?? $cause, $this->parser->retryMilliseconds());
     }
 
     private function millisecondsNamedByRetryAfter(int $nowEpochMilliseconds): ?int
@@ -105,7 +105,7 @@ final class StreamAnswer
         try {
             $this->parser->feed($chunk);
         } catch (EventStreamLimitExceeded $limitExceeded) {
-            $this->limitExceeded = $limitExceeded;
+            $this->messageOfTheLimitExceeded = $limitExceeded->getMessage();
 
             return -1;
         }

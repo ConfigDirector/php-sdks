@@ -129,6 +129,32 @@ final class StreamingCommandTest extends TestCase
         self::assertSame(['standard-error.txt'], TemporaryFolder::entriesOf($this->storagePath));
     }
 
+    public function testTheCommandExitsWithOneAndWritesToStandardErrorWhenItFindsNoComposerAutoloader(): void
+    {
+        $folderWithoutAnAutoloader = $this->storagePath . DIRECTORY_SEPARATOR . 'package-without-vendor';
+        mkdir($folderWithoutAnAutoloader . DIRECTORY_SEPARATOR . 'bin', recursive: true);
+        $commandWithoutAnAutoloader = implode(
+            DIRECTORY_SEPARATOR,
+            [$folderWithoutAnAutoloader, 'bin', 'configdirector-stream'],
+        );
+        copy(dirname(__DIR__) . '/bin/configdirector-stream', $commandWithoutAnAutoloader);
+
+        $finishedCommand = PhpProcess::running(
+            $commandWithoutAnAutoloader,
+            [],
+            environment: [
+                'CONFIGDIRECTOR_SERVER_KEY' => 'server-sdk-key',
+                'CONFIGDIRECTOR_BASE_URL' => 'http://127.0.0.1:9',
+                'CONFIGDIRECTOR_STORAGE_PATH' => $this->storagePath,
+            ],
+            fileForStandardError: $this->fileOfStandardError,
+        )->finished();
+
+        self::assertSame(1, $finishedCommand->exitCode);
+        self::assertSame('', $finishedCommand->output);
+        self::assertNotSame('', file_get_contents($this->fileOfStandardError));
+    }
+
     public function testTheCommandExitsWithOneWhenTheLogLevelIsNotAPsr3Level(): void
     {
         $server = $this->serverStreamingThePageSize();

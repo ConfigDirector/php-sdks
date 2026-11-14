@@ -10,6 +10,8 @@ final class ReportedValue
 {
     private const int MAXIMUM_CHARACTERS_REPORTED_AS_TEXT = 500;
 
+    private const int MOST_LEVELS_OF_ARRAYS_WRITTEN = 512;
+
     private const int JSON_TEXT_FLAGS = JSON_UNESCAPED_SLASHES
         | JSON_UNESCAPED_UNICODE
         | JSON_INVALID_UTF8_SUBSTITUTE
@@ -38,8 +40,11 @@ final class ReportedValue
             : ['valueId' => $valueIdSentWithTheValue ?? ValueId::of($text)];
     }
 
-    private static function jsonTextOf(mixed $value): string
+    private static function jsonTextOf(mixed $value, int $levelsOfArraysAroundIt = 0): string
     {
+        if ($levelsOfArraysAroundIt > self::MOST_LEVELS_OF_ARRAYS_WRITTEN) {
+            throw new \JsonException('The value holds more levels of arrays than can be written as JSON.');
+        }
         if (is_float($value)) {
             return is_finite($value) ? ScalarText::of($value) ?? 'null' : 'null';
         }
@@ -49,16 +54,14 @@ final class ReportedValue
             return $jsonText === false ? 'null' : $jsonText;
         }
 
-        if (array_is_list($value)) {
-            return '[' . implode(',', array_map(self::jsonTextOf(...), $value)) . ']';
-        }
-
+        $isAList = array_is_list($value);
         $memberTexts = [];
         foreach ($value as $name => $member) {
-            $memberTexts[] = self::jsonTextOf((string) $name) . ':' . self::jsonTextOf($member);
+            $memberText = self::jsonTextOf($member, $levelsOfArraysAroundIt + 1);
+            $memberTexts[] = $isAList ? $memberText : self::jsonTextOf((string) $name) . ':' . $memberText;
         }
 
-        return '{' . implode(',', $memberTexts) . '}';
+        return $isAList ? '[' . implode(',', $memberTexts) . ']' : '{' . implode(',', $memberTexts) . '}';
     }
 
     private static function isShortEnoughToReportAsText(string $text): bool

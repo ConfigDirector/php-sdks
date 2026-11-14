@@ -8,6 +8,8 @@ use Composer\Autoload\ClassLoader;
 
 final readonly class PhpProcess
 {
+    private const int SIGNAL_THAT_CANNOT_BE_HANDLED = 9;
+
     /**
      * @param resource $process
      * @param resource $standardOutput
@@ -82,6 +84,13 @@ final readonly class PhpProcess
             terminatingSignal: $status['signaled'] ? $status['termsig'] : null,
             exitCode: $status['signaled'] ? null : $status['exitcode'],
         );
+    }
+
+    public function killAtOnce(): void
+    {
+        proc_terminate($this->process, self::SIGNAL_THAT_CANNOT_BE_HANDLED);
+        fclose($this->standardOutput);
+        proc_close($this->process);
     }
 
     public function stop(): void

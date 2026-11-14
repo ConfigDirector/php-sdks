@@ -1,5 +1,5 @@
 .PHONY: install hooks verify-php verify-lock format lint test test-lowest samples-local check-floor audit \
-	check check-all clean
+	benchmark check check-all clean
 
 # Every package this repository publishes, each in a directory under packages/ named after its Composer
 # package. Narrow a target to one of them with, for example, `make test PACKAGES=server-sdk`.
@@ -103,6 +103,14 @@ audit:
 		printf '\n\033[1m==> audit %s\033[0m\n' "$$project"; \
 		(cd "$$project" && composer audit --locked) || exit 1; \
 	done
+
+# What the server SDK costs a request: createClient, initialize(), reads and dispose() in a new PHP process
+# for each request, against a local store that holds CONFIGS configs with rules and segments. It connects
+# to nothing, and its numbers depend on the machine, so no check runs it.
+CONFIGS := 200
+benchmark:
+	@(cd packages/server-sdk && composer install --no-interaction --no-progress --quiet)
+	@php tools/benchmark/run.php "$(CURDIR)/packages/server-sdk/vendor/autoload.php" $(CONFIGS)
 
 # The fast loop while working.
 check: lint test

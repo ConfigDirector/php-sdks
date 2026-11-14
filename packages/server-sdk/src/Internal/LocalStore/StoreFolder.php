@@ -6,6 +6,14 @@ namespace ConfigDirector\Internal\LocalStore;
 
 final readonly class StoreFolder
 {
+    private const int FILE_TYPE_BITS_OF_A_MODE = 0o170000;
+
+    private const int FILE_TYPE_OF_A_SYMBOLIC_LINK = 0o120000;
+
+    private const int FILE_TYPE_OF_A_FOLDER = 0o040000;
+
+    private const int ACCESS_OF_OTHER_USERS_IN_A_MODE = 0o077;
+
     private function __construct(
         public string $path,
         public ?FolderRefusal $refusal,
@@ -60,14 +68,28 @@ final readonly class StoreFolder
         if (!is_dir($folder) && mkdir($folder, 0o700, true)) {
             chmod($folder, 0o700);
         }
-        if (is_link($folder)) {
-            return FolderRefusal::SymbolicLink;
-        }
-        if (!is_dir($folder)) {
+        $statusOfTheFolderItself = lstat($folder);
+        if ($statusOfTheFolderItself === false) {
             return FolderRefusal::NotWritable;
         }
-        if ($requiredOwnerId !== null && fileowner($folder) !== $requiredOwnerId) {
+
+        $fileType = $statusOfTheFolderItself['mode'] & self::FILE_TYPE_BITS_OF_A_MODE;
+        if ($fileType === self::FILE_TYPE_OF_A_SYMBOLIC_LINK) {
+            return FolderRefusal::SymbolicLink;
+        }
+        if ($fileType !== self::FILE_TYPE_OF_A_FOLDER) {
+            return FolderRefusal::NotWritable;
+        }
+        if ($requiredOwnerId === null) {
+            return is_writable($folder) ? null : FolderRefusal::NotWritable;
+        }
+        if ($statusOfTheFolderItself['uid'] !== $requiredOwnerId) {
             return FolderRefusal::OwnedByAnotherUser;
+        }
+
+        $isOpenToOtherUsers = ($statusOfTheFolderItself['mode'] & self::ACCESS_OF_OTHER_USERS_IN_A_MODE) !== 0;
+        if ($isOpenToOtherUsers && !chmod($folder, 0o700)) {
+            return FolderRefusal::NotWritable;
         }
 
         return is_writable($folder) ? null : FolderRefusal::NotWritable;

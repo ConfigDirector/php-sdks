@@ -124,6 +124,7 @@ final class InMemoryConnection implements Connection
     public function close(): void
     {
         $this->state = InMemoryConnectionState::Closed;
+        $this->deliverPayload = static function (ServerSdkPayload $payload): void {};
     }
 
     private function connectWithTheStoredValues(): ServerSdkPayload

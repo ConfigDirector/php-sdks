@@ -16,10 +16,15 @@ final class Watches
 
     public function remove(Watch $watch): void
     {
-        $this->watchesByConfigKey[$watch->configKey] = array_values(array_filter(
+        $watchesLeftOnTheConfigKey = array_values(array_filter(
             $this->watchesByConfigKey[$watch->configKey] ?? [],
             static fn(Watch $other): bool => $other !== $watch,
         ));
+        if ($watchesLeftOnTheConfigKey === []) {
+            unset($this->watchesByConfigKey[$watch->configKey]);
+        } else {
+            $this->watchesByConfigKey[$watch->configKey] = $watchesLeftOnTheConfigKey;
+        }
     }
 
     public function removeFirstWithCallback(string $configKey, callable $callback): void

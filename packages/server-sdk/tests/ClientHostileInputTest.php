@@ -1,0 +1,279 @@
+<?php
+
+declare(strict_types=1);
+
+namespace ConfigDirector\Tests;
+
+use ConfigDirector\ConfigDirector;
+use ConfigDirector\ConfigDirectorClient;
+use ConfigDirector\ConnectionOptions;
+use ConfigDirector\Context;
+use ConfigDirector\TelemetryOptions;
+use ConfigDirector\Tests\Support\ScriptedSdkServer;
+use ConfigDirector\Tests\Support\TemporaryFolder;
+use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
+
+final class ClientHostileInputTest extends TestCase
+{
+    private string $storagePath;
+
+    private ScriptedSdkServer $server;
+
+    #[\Override]
+    protected function setUp(): void
+    {
+        $this->storagePath = TemporaryFolder::create();
+        $this->server = ScriptedSdkServer::answeringEveryRequestWith([
+            'status' => 200,
+            'body' => [
+                'kind' => 'full',
+                'configs' => [
+                    'page-size' => [
+                        'id' => 'config-page-size',
+                        'key' => 'page-size',
+                        'type' => 'integer',
+                        'target' => ['rules' => [], 'defaultValue' => '25', 'defaultValueId' => 'value-25'],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    #[\Override]
+    protected function tearDown(): void
+    {
+        $this->server->stop();
+        TemporaryFolder::remove($this->storagePath);
+    }
+
+    public function testATelemetryFileHoldingTheLargestIntegerAsACountIsReportedWithoutThatCount(): void
+    {
+        $this->writeTheFileOfTheLocalStore(
+            'telemetry-tally.json',
+            '{"collectingSince":1,"droppedEvaluations":0,"droppedCapturedContexts":0}',
+        );
+        $this->writeTheFileOfTheLocalStore(
+            'telemetry.jsonl',
+            '{"collectingSince":1,"evaluationCounts":{"{\"key\":\"written-by-hand\"}":9223372036854775807}}' . "\n",
+        );
+        $client = $this->client();
+
+        $client->initialize();
+        $client->getValue('page-size', 10, new Context(id: 'user-42'));
+        $client->dispose();
+
+        self::assertSame([['page-size', 1]], $this->keysAndCountsOfTheEvaluationsReported());
+    }
+
+    public function testATelemetryTallyHoldingTheLargestIntegerAsDroppedEvaluationsIsStartedAgainWithNoneDropped(): void
+    {
+        $this->writeTheFileOfTheLocalStore(
+            'telemetry-tally.json',
+            '{"collectingSince":1,"droppedEvaluations":9223372036854775807,"droppedCapturedContexts":0}',
+        );
+        $client = $this->client();
+
+        $client->initialize();
+        $client->getValue('page-size', 10, new Context(id: 'user-42'));
+        $client->dispose();
+        $clientOfARequestThatEndsAfterItsFlushInterval = $this->client(flushIntervalMilliseconds: 1);
+        $clientOfARequestThatEndsAfterItsFlushInterval->initialize();
+        usleep(5_000);
+        $clientOfARequestThatEndsAfterItsFlushInterval->dispose();
+
+        self::assertSame([['page-size', 1]], $this->keysAndCountsOfTheEvaluationsReported());
+        self::assertSame(
+            ['evaluatedConfig' => 0, 'capturedContexts' => 0],
+            $this->bodyOfTheOnlyReport()['droppedEvents'] ?? null,
+        );
+    }
+
+    public function testAPollingPauseFileThatEndsAtTheLargestIntegerIsReadAsNoPause(): void
+    {
+        $this->writeTheFileOfTheLocalStore(
+            'polling-pause-' . hash('sha256', $this->server->url . '/server/polling/v1') . '.json',
+            '{"sessionId":"session-1","recordedAt":1,"until":9223372036854775807,"pollFailed":true,'
+            . '"refusalStatus":null}',
+        );
+        $client = $this->client();
+
+        $client->initialize();
+        $pageSize = $client->getValue('page-size', 10);
+
+        self::assertSame(25, $pageSize);
+    }
+
+    public function testAPayloadFileConfirmedFreshAtTheSmallestIntegerIsReadAsAnEmptyLocalStore(): void
+    {
+        $this->writeTheFileOfTheLocalStore(
+            'payload.json',
+            '{"confirmedFreshAt":-9223372036854775808,"sessionId":"session-1","payload":{"configs":{}}}',
+        );
+        $client = $this->client();
+
+        $client->initialize();
+        $pageSize = $client->getValue('page-size', 10);
+
+        self::assertSame(25, $pageSize);
+    }
+
+    public function testAServedJsonValueOfFiveMegabytesThatIsNotJsonReturnsTheInCodeDefaultValue(): void
+    {
+        $this->storeThePayloadServing([
+            'limits' => [
+                'id' => 'config-limits',
+                'key' => 'limits',
+                'type' => 'json',
+                'target' => [
+                    'rules' => [],
+                    'defaultValue' => '{"daily":' . str_repeat('9', 5_000_000),
+                    'defaultValueId' => 'value-limits',
+                ],
+            ],
+        ]);
+        $client = $this->client();
+
+        $client->initialize();
+        $evaluation = $client->evaluate('limits', ['daily' => 10]);
+        $client->dispose();
+
+        self::assertSame(['daily' => 10], $evaluation->value);
+        self::assertTrue($evaluation->isDefaultValue);
+    }
+
+    public function testATraitNestedTenThousandArraysDeepIsSearchedWithoutAnErrorAndMatchesNoRule(): void
+    {
+        $this->storeThePayloadServing([
+            'plan-banner' => [
+                'id' => 'config-plan-banner',
+                'key' => 'plan-banner',
+                'type' => 'string',
+                'target' => [
+                    'rules' => [
+                        [
+                            'id' => 'rule-pro-plan',
+                            'order' => 0,
+                            'type' => 'conditional',
+                            'target' => 'value',
+                            'value' => 'Pro banner',
+                            'valueId' => 'value-pro-banner',
+                            'conditions' => [
+                                [
+                                    'kind' => 'attribute',
+                                    'id' => 'condition-pro-plan',
+                                    'attribute' => 'traits',
+                                    'trait' => '/account/0/0/0/plan',
+                                    'operator' => 'equals',
+                                    'targetType' => 'text',
+                                    'targetValues' => ['pro'],
+                                ],
+                            ],
+                        ],
+                    ],
+                    'defaultValue' => 'Standard banner',
+                    'defaultValueId' => 'value-standard-banner',
+                ],
+            ],
+        ]);
+        $accountNestedTenThousandArraysDeep = ['plan' => 'pro'];
+        for ($level = 1; $level <= 10_000; $level++) {
+            $accountNestedTenThousandArraysDeep = [$accountNestedTenThousandArraysDeep];
+        }
+        $client = $this->client();
+
+        $client->initialize();
+        $banner = $client->getValue(
+            'plan-banner',
+            'In-code banner',
+            new Context(id: 'user-42', traits: ['account' => $accountNestedTenThousandArraysDeep]),
+        );
+        $client->dispose();
+
+        self::assertSame('Standard banner', $banner);
+    }
+
+    public function testAReadWhoseInCodeDefaultValueContainsItselfReturnsItAndIsLeftOutOfTheReport(): void
+    {
+        $inCodeDefaultValue = ['retries' => 3];
+        $inCodeDefaultValue['itself'] = &$inCodeDefaultValue;
+        $client = $this->client(flushIntervalMilliseconds: 1);
+
+        $client->initialize();
+        $valueOfAConfigThatDoesNotExist = $client->getValue('retry-policy', $inCodeDefaultValue);
+        $client->getValue('page-size', 10, new Context(id: 'user-42'));
+        usleep(5_000);
+        $client->dispose();
+
+        self::assertSame(3, $valueOfAConfigThatDoesNotExist['retries']);
+        self::assertSame([['page-size', 1]], $this->keysAndCountsOfTheEvaluationsReported());
+    }
+
+    private function client(int $flushIntervalMilliseconds = 30_000): ConfigDirectorClient
+    {
+        return ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: $this->server->url, storagePath: $this->storagePath),
+            logger: new NullLogger(),
+            telemetry: new TelemetryOptions(flushInterval: $flushIntervalMilliseconds),
+        );
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $configs
+     */
+    private function storeThePayloadServing(array $configs): void
+    {
+        $this->writeTheFileOfTheLocalStore('payload.json', json_encode(
+            [
+                'confirmedFreshAt' => (int) floor(microtime(true) * 1_000),
+                'sessionId' => 'session-1',
+                'payload' => ['kind' => 'full', 'configs' => $configs],
+            ],
+            JSON_THROW_ON_ERROR,
+        ));
+    }
+
+    private function writeTheFileOfTheLocalStore(string $name, string $contents): void
+    {
+        $folder = $this->storagePath . DIRECTORY_SEPARATOR . hash('sha256', 'server-sdk-key');
+        if (!is_dir($folder)) {
+            mkdir($folder, 0o700);
+        }
+        file_put_contents($folder . DIRECTORY_SEPARATOR . $name, $contents);
+    }
+
+    /**
+     * @return list<array{mixed, mixed}>
+     */
+    private function keysAndCountsOfTheEvaluationsReported(): array
+    {
+        $aggregatedEvents = $this->bodyOfTheOnlyReport()['aggregatedEvents'] ?? null;
+        $evaluations = is_array($aggregatedEvents) ? $aggregatedEvents['evaluatedConfig'] ?? null : null;
+
+        $keysAndCounts = [];
+        foreach (is_array($evaluations) ? $evaluations : [] as $evaluation) {
+            $event = is_array($evaluation) ? $evaluation['event'] ?? null : null;
+            $keysAndCounts[] = [
+                is_array($event) ? $event['key'] ?? null : null,
+                is_array($evaluation) ? $evaluation['count'] ?? null : null,
+            ];
+        }
+
+        return $keysAndCounts;
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private function bodyOfTheOnlyReport(): array
+    {
+        $reports = array_values(array_filter(
+            $this->server->requestsReceived(),
+            static fn(array $request): bool => $request['path'] === '/server/telemetry/v1',
+        ));
+        self::assertCount(1, $reports);
+
+        return is_array($reports[0]['body']) ? $reports[0]['body'] : [];
+    }
+}

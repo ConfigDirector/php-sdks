@@ -148,6 +148,25 @@ final class ClientReadsTest extends SampleConfigsTestCase
         );
     }
 
+    public function testAClientServingOneRequestAfterAnotherServesEachTheValueOfItsOwnContext(): void
+    {
+        $client = self::readyClient();
+        $proCustomerOfTheFirstRequest = new Context(id: 'user-123', traits: ['plan' => 'pro']);
+        $freeCustomerOfTheSecondRequest = new Context(id: 'user-456', traits: ['plan' => 'free']);
+
+        $evaluationOfTheFirstRequest = $client->evaluate('day-of-the-week-config', 'Friday', $proCustomerOfTheFirstRequest);
+        $evaluationOfARequestWithoutAContext = $client->evaluate('day-of-the-week-config', 'Friday');
+        $evaluationOfTheSecondRequest = $client->evaluate('day-of-the-week-config', 'Friday', $freeCustomerOfTheSecondRequest);
+        $evaluationOfTheFirstCustomerAgain = $client->evaluate('day-of-the-week-config', 'Friday', $proCustomerOfTheFirstRequest);
+
+        self::assertSame('Tuesday', $evaluationOfTheFirstRequest->value);
+        self::assertSame('Monday', $evaluationOfARequestWithoutAContext->value);
+        self::assertNull($evaluationOfARequestWithoutAContext->context);
+        self::assertSame('Monday', $evaluationOfTheSecondRequest->value);
+        self::assertSame($freeCustomerOfTheSecondRequest, $evaluationOfTheSecondRequest->context);
+        self::assertSame('Tuesday', $evaluationOfTheFirstCustomerAgain->value);
+    }
+
     public function testARuleOnTheApplicationNameServesItsValueToThatApplication(): void
     {
         $client = ConfigDirector::createClient(

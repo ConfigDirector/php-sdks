@@ -95,6 +95,26 @@ with a flush interval of one millisecond stands for the later request that sends
 `ClientTelemetryOverTimeTest` moves a settable clock instead of waiting. One test waits the five
 seconds a report is given for its answer.
 
+`ClientsOfManyProcessesTest` runs 50 PHP processes that serve requests on one local store for about
+six seconds each, from `packages/server-sdk/tests/Internal/Client/Processes/serve-requests-on-an-accelerated-clock.php`.
+Their clock runs 60 times faster than real time, so that the minimum polling interval of 60 seconds
+passes every second, and the scripted SDK server gives every request the same answer. One test counts
+the polls and adds up the evaluations of every telemetry report; the other kills a process every 20
+milliseconds meanwhile. `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
+and late in 100,000 reads, 1,000 refreshes of the local store, 100,000 watches and 1,000 clients, the
+last with the cycle collector off, so that a client is freed when it is disposed of and not later.
+`SourceOfTheSdkTest` reads the source for calls to functions of PHP extensions that `composer.json`
+does not require, and fails on one without a `function_exists` check in its file. The development
+dependencies bring a polyfill of the ctype extension, so the suite itself cannot notice such a call.
+It also fails on `unserialize`, `eval`, `include` or `require` anywhere under `src/`.
+
+`make benchmark` measures what the server SDK costs a request: `createClient`, `initialize()`, reads
+and `dispose()`, each request in a PHP process of its own, against a local store that holds 200
+configs with rules and segments (`make benchmark CONFIGS=1000` for another number). It runs once with
+every script compiled in each process and once with the compiled scripts reused through the OPcache
+file cache, which is closer to PHP-FPM. It connects to nothing. Its numbers depend on the machine,
+so it is not part of `make check-all`; the scripts are in [`tools/benchmark/`](tools/benchmark/).
+
 The streaming process tests of the server SDK stream from a scripted stream server,
 `packages/server-sdk/tests/Support/Processes/scripted-stream-server.php`, which holds one event stream
 open, answers heartbeats, telemetry reports and polls meanwhile, records what it received, and sends

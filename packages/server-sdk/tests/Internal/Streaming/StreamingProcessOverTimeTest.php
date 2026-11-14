@@ -88,6 +88,7 @@ final class StreamingProcessOverTimeTest extends TestCase
     #[\Override]
     protected function tearDown(): void
     {
+        gc_enable();
         $this->streamingProcess?->letGoOfTheLocalStore();
         $this->server?->stop();
         TemporaryFolder::remove($this->storagePath);
@@ -585,6 +586,25 @@ final class StreamingProcessOverTimeTest extends TestCase
         self::assertCount(2, $server->requestsReceivedAt('/server/sse/v1'));
     }
 
+    public function testWithoutTheCycleCollectorMemoryAfterTwelveStreamsWereDroppedForALongLineIsWithin512KibibytesOfMemoryAfterTwo(): void
+    {
+        $server = $this->serverStreaming(array_fill(
+            0,
+            13,
+            ['chunks' => [self::eventOfTheFullPayloadWith(self::PAGE_SIZE_OF_25)]],
+        ));
+        $streamingProcess = $this->streamingProcessHoldingTheLocalStore();
+        gc_disable();
+
+        $this->dropTheOpenStreamsWithALineLongerThanOneMebibyte($streamingProcess, $server, streamsDropped: 2);
+        $bytesAfterTwoStreamsWereDropped = memory_get_usage();
+        $this->dropTheOpenStreamsWithALineLongerThanOneMebibyte($streamingProcess, $server, streamsDropped: 12);
+        $bytesAfterTwelveStreamsWereDropped = memory_get_usage();
+
+        self::assertCount(12, $this->reconnectionsLogged());
+        self::assertLessThan(512 * 1024, $bytesAfterTwelveStreamsWereDropped - $bytesAfterTwoStreamsWereDropped);
+    }
+
     public function testAStreamRefusedWithA403ThrowsAConnectionExceptionWithTheStatusAfterOneErrorNamingIt(): void
     {
         $server = $this->serverStreaming([['status' => 403, 'body' => 'The key server-sdk-key is not allowed']]);
@@ -978,6 +998,28 @@ final class StreamingProcessOverTimeTest extends TestCase
                 self::fail('What the test waits for did not happen within five seconds.');
             }
             usleep(1_000);
+        }
+    }
+
+    private function dropTheOpenStreamsWithALineLongerThanOneMebibyte(
+        DefaultStreamingProcess $streamingProcess,
+        ScriptedStreamServer $server,
+        int $streamsDropped,
+    ): void {
+        while (count($this->reconnectionsLogged()) < $streamsDropped) {
+            $streamsOpenedBeforeTheLine = count($this->reconnectionsLogged()) + 1;
+            $this->advanceUntil(
+                $streamingProcess,
+                static fn(): bool => count($server->requestsReceivedAt('/server/sse/v1')) === $streamsOpenedBeforeTheLine,
+            );
+            $this->advanceForRealMilliseconds($streamingProcess, 50);
+
+            $server->sendToTheOpenStream('data: ' . str_repeat('x', 1_048_577));
+            $this->advanceUntil(
+                $streamingProcess,
+                fn(): bool => count($this->reconnectionsLogged()) === $streamsOpenedBeforeTheLine,
+            );
+            $this->clock->epochMilliseconds += 2_000;
         }
     }
 

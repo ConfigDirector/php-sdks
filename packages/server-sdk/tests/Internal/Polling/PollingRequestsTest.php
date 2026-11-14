@@ -172,6 +172,44 @@ final class PollingRequestsTest extends TestCase
         self::assertFalse($pollingPauseWhileThePollIsUnanswered->pollFailed);
     }
 
+    public function testAfterARequestIsKilledDuringItsPollTheNextRequestServesTheStoredValuesAndSendsNoPoll(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]],
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => []], 'delayMilliseconds' => 500],
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]],
+        ]);
+        $this->outputOfARequestAt(self::NOVEMBER_12_2026_AT_NOON);
+        $this->killARequestDuringItsPollAt(self::NOVEMBER_12_2026_AT_NOON + 60_000, pollsReceivedOnceItPolls: 2);
+
+        $output = $this->outputOfARequestAt(self::NOVEMBER_12_2026_AT_NOON + 60_001);
+
+        self::assertSame("ready\n", $output);
+        self::assertCount(2, $server->requestsReceived());
+    }
+
+    public function testAfterARequestIsKilledDuringItsPollTheFirstRequestAfterThePollingIntervalPollsAgain(): void
+    {
+        $server = $this->serverAnswering([
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => []]],
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => []], 'delayMilliseconds' => 500],
+            ['status' => 200, 'body' => ['kind' => 'full', 'configs' => ['flag' => ['value' => 'polled-again']]]],
+        ]);
+        $this->outputOfARequestAt(self::NOVEMBER_12_2026_AT_NOON);
+        $this->killARequestDuringItsPollAt(self::NOVEMBER_12_2026_AT_NOON + 60_000, pollsReceivedOnceItPolls: 2);
+
+        $output = $this->outputOfARequestAt(self::NOVEMBER_12_2026_AT_NOON + 120_000);
+
+        self::assertSame("ready\n", $output);
+        self::assertCount(3, $server->requestsReceived());
+        self::assertSame(
+            ['kind' => 'full', 'configs' => ['flag' => ['value' => 'polled-again']]],
+            LocalStore::ofServerSdkKey('server-sdk-key', $this->storagePath, new RecordingLogger())
+                ->storedPayload()
+                ?->payload,
+        );
+    }
+
     public function testARequestWhosePollIsRefusedWith401LogsOneErrorAndCallsItsConnectionErrorHandler(): void
     {
         $this->serverAnswering([['status' => 401, 'body' => 'Unauthorized']]);
@@ -256,6 +294,21 @@ final class PollingRequestsTest extends TestCase
     private function serverAnswering(array $answersInOrder): ScriptedSdkServer
     {
         return $this->server = ScriptedSdkServer::answering($answersInOrder);
+    }
+
+    private function killARequestDuringItsPollAt(int $nowEpochMilliseconds, int $pollsReceivedOnceItPolls): void
+    {
+        $request = $this->requestAt($nowEpochMilliseconds, '');
+        $giveUpAt = hrtime(true) + 10_000_000_000;
+        while (count($this->server?->requestsReceived() ?? []) < $pollsReceivedOnceItPolls) {
+            if (hrtime(true) >= $giveUpAt) {
+                $request->stop();
+                self::fail('The request sent no poll within 10 seconds.');
+            }
+            usleep(1_000);
+        }
+
+        $request->killAtOnce();
     }
 
     private function outputOfARequestAt(int $nowEpochMilliseconds): string

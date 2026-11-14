@@ -12,10 +12,26 @@ final class RefusalDetail
 
     public static function in(string $responseBody, #[\SensitiveParameter] string $serverSdkKey): string
     {
-        $detail = str_replace($serverSdkKey, '[the server SDK key]', $responseBody);
+        $detail = str_replace(self::writtenFormsOf($serverSdkKey), '[the server SDK key]', $responseBody);
 
         return strlen($detail) > self::MAXIMUM_BYTES
             ? trim(substr($detail, 0, self::MAXIMUM_BYTES)) . '…'
             : trim($detail);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function writtenFormsOf(#[\SensitiveParameter] string $serverSdkKey): array
+    {
+        $writtenForms = [$serverSdkKey, trim($serverSdkKey)];
+        foreach ([JSON_INVALID_UTF8_SUBSTITUTE, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES] as $jsonFlags) {
+            $jsonText = json_encode(trim($serverSdkKey), $jsonFlags);
+            if ($jsonText !== false) {
+                $writtenForms[] = substr($jsonText, 1, -1);
+            }
+        }
+
+        return array_values(array_filter($writtenForms, static fn(string $form): bool => $form !== ''));
     }
 }

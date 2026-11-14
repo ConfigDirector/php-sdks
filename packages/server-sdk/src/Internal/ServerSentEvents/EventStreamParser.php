@@ -115,7 +115,8 @@ final class EventStreamParser
 
     private static function millisecondsNamedBy(string $retryValue): ?int
     {
-        if (!ctype_digit($retryValue)) {
+        $holdsOnlyDigits = strspn($retryValue, '0123456789') === strlen($retryValue);
+        if (!$holdsOnlyDigits || !is_numeric($retryValue)) {
             return null;
         }
 

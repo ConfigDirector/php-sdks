@@ -81,7 +81,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   created or written to is not used: the client never asks ConfigDirector for values, every read
   returns its in-code default value, and one error that names the folder is logged for each
   client. A file of the local store that cannot be read counts as an empty local store, with one
-  error for each client.
+  error for each client. A local store folder that other system users could read or write to is
+  closed to them when a client opens it. A file of the local store that holds a time or a count
+  far outside what the SDK writes, as a damaged or hand-edited file can, counts as one that
+  cannot be read, and such an entry of the stored telemetry is left out of the report.
 - A config or segment that the SDK cannot read in the values it received is skipped, and every
   other config is served. A read of a skipped config returns its in-code default value with the
   reason `config-state-missing`. The request that received the values logs a warning that names
@@ -116,7 +119,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   count their exposures from it. A read that returns the in-code default value is reported with
   its reason, a read made before `initialize()` included. `getAllConfigs` and reads after
   `dispose()` are not reported. A value longer than 500 characters, and every JSON value, is
-  reported as a value ID and not as its text.
+  reported as a value ID and not as its text. A read whose in-code default value holds more than
+  512 levels of arrays, as an array that contains itself does, returns its value and is not
+  reported.
 - A context with an `id` that is not anonymous is sent to ConfigDirector with its kind, name and
   traits, and appears in the dashboard. An anonymous context, or one without an `id`, is never
   sent, and its evaluations name no context. A context with an invalid kind is counted under the
@@ -214,7 +219,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `logger` takes a PSR-3 logger. Without one the SDK writes warnings and errors through
   `error_log`, and `logLevel` takes a PSR-3 level, such as `Psr\Log\LogLevel::DEBUG`, to write
   more or less. A `logLevel` that is not a PSR-3 level throws `ConfigDirectorValidationException`.
-  `logLevel` has no effect when a `logger` is given.
+  `logLevel` has no effect when a `logger` is given. The default logger writes every message on
+  one line, with a space in place of each control character of a value it fills in, such as a
+  line break or an escape character.
 - `ConfigDirectorException` is the base class of every exception of the SDK, including
   `ConfigDirectorValidationException`, `ConfigDirectorInitializationException` and
   `ConfigDirectorConnectionException`. When one of them has a cause in `getPrevious()` that the
@@ -222,7 +229,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `ConfigDirectorException` too.
 - The server SDK key is marked `#[\SensitiveParameter]` wherever the SDK passes it on, so the
   stack trace of an exception, such as a rejected option of `createClient` or
-  `createStreamingProcess`, shows `Object(SensitiveParameterValue)` in its place.
+  `createStreamingProcess`, shows `Object(SensitiveParameterValue)` in its place. A dump of a
+  client or of a streaming process, as `print_r`, `var_dump` and `var_export` write it, does not
+  show the key either, and a message ConfigDirector answers with is logged without the key it
+  repeats.
 - `ConfigDirector\Testing\ConfigDirectorTesting::createTestClient(values:, timeout:, logger:)`
   returns a `TestClient`: the SDK's real client, as `$testClient->client`, over an in-memory
   connection that the test controls. It needs no server SDK key, never connects to
@@ -274,8 +284,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   arguments and reads no `.env` file. It writes its log to standard error, whatever PHP's
   `error_log` setting, from the level `info`, so its first line names the folder of the local
   store it keeps up to date. It exits with 0 after SIGTERM or SIGINT and with 1 otherwise: when
-  the key variable is not set or a setting is rejected, with the reason on standard error, and
-  when the streaming process stops because of a failure.
+  the key variable is not set or a setting is rejected, with the reason on standard error, when
+  the command finds no Composer autoloader, and when the streaming process stops because of a
+  failure.
 - While the connection of a streaming process is open, no request of the host asks
   ConfigDirector for values. A request reads a change once the streaming process has written
   it to the local store, and a client that has lived longer than `telemetry.flushInterval` reads
@@ -292,8 +303,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `run()` returns after SIGTERM or SIGINT, once it has sent the telemetry the local store holds.
   This needs the pcntl extension, which the package suggests. While it runs, `run()` handles the
   two signals itself, and it puts back the handlers that were there before it returns. Without
-  the extension, and on Windows, a signal ends the PHP process at once, and the requests send
-  what the local store holds.
+  the extension, on Windows, and where `disable_functions` names `pcntl_signal`,
+  `pcntl_signal_get_handler` or `pcntl_signal_dispatch`, a signal ends the PHP process at once,
+  and the requests send what the local store holds.
 - `run()` throws `ConfigDirectorConnectionException`, with the `status`, when ConfigDirector
   refuses the connection with a 4xx status other than 429, as it does for a server SDK key it
   does not know. It throws `ConfigDirectorException` when another streaming process already

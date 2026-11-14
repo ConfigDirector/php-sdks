@@ -41,12 +41,17 @@ final class DefaultStreamingProcess implements StreamingProcess
     {
         $this->takeHoldOfTheLocalStore();
         $this->isToldToStop = false;
-        $restoreTheSignalHandlers = $this->stopOnATerminationSignal();
+        $canHandleSignals = function_exists('pcntl_signal')
+            && function_exists('pcntl_signal_get_handler')
+            && function_exists('pcntl_signal_dispatch');
+        $restoreTheSignalHandlers = $canHandleSignals
+            ? $this->stopOnATerminationSignal()
+            : static function (): void {};
         try {
             while (!$this->isToldToStop) {
                 $this->advance();
                 $this->transport->waitForActivityAtMost(self::MILLISECONDS_BETWEEN_LOOKS_AT_WHAT_IS_DUE);
-                if (function_exists('pcntl_signal_dispatch')) {
+                if ($canHandleSignals) {
                     pcntl_signal_dispatch();
                 }
             }
@@ -157,10 +162,6 @@ final class DefaultStreamingProcess implements StreamingProcess
      */
     private function stopOnATerminationSignal(): \Closure
     {
-        if (!function_exists('pcntl_signal')) {
-            return static function (): void {};
-        }
-
         $handlersBeforeTheRun = [];
         foreach ([SIGTERM, SIGINT] as $signal) {
             $handlersBeforeTheRun[$signal] = pcntl_signal_get_handler($signal);

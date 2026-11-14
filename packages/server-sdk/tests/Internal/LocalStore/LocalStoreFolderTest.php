@@ -60,6 +60,18 @@ final class LocalStoreFolderTest extends TestCase
     }
 
     #[RequiresOperatingSystem('Linux|Darwin')]
+    public function testAStoreFolderThatEveryUserCouldWriteToIsMadeReadableByItsOwnerOnly(): void
+    {
+        umask(0);
+        mkdir($this->storeFolder(), 0o777);
+
+        self::storeAPayloadIn($this->storagePath);
+
+        clearstatcache();
+        self::assertSame(0o700, fileperms($this->storeFolder()) & 0o777);
+    }
+
+    #[RequiresOperatingSystem('Linux|Darwin')]
     public function testThePayloadFileIsReadableByItsOwnerOnly(): void
     {
         umask(0);

@@ -53,6 +53,8 @@ final class LocalStoreConnection implements Connection
     public function close(): void
     {
         $this->transport?->close();
+        $this->transport = null;
+        $this->payloadLastRead = null;
     }
 
     private function payloadDeliveredFrom(StoredPayload $storedPayload): ServerSdkPayload
