@@ -54,10 +54,12 @@ lint: install
 			&& php vendor/bin/phpstan analyse --no-progress) || exit 1; \
 	done
 
-test: install
+test:
 	@for package in $(PACKAGES); do \
 		printf '\n\033[1m==> test %s\033[0m\n' "$$package"; \
-		(cd "packages/$$package" && php vendor/bin/phpunit) || exit 1; \
+		(cd "packages/$$package" \
+			&& composer install --no-interaction --no-progress \
+			&& php vendor/bin/phpunit) || exit 1; \
 	done
 
 # The same tests against the lowest version of every dependency that composer.json allows. Without
