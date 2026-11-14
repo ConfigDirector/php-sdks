@@ -104,6 +104,12 @@ payload, because the error it logs tells the test that the bytes arrived. The te
 streaming process with a signal need the pcntl extension and are skipped without it, as on Windows.
 CI installs it on Ubuntu and macOS, and `make check-floor` builds it into its image.
 
+The Laravel sample's `StreamCommandTest` starts `php artisan configdirector:stream` as a PHP process
+against a trimmed copy of that server, `samples/server-sdk/laravel/tests/Support/Processes/scripted-stream-server.php`,
+which holds one event stream open and sends what the test writes to it. Each request is handled in
+the test's own process. Its test that stops the command with SIGTERM needs pcntl too, which CI's
+samples job installs.
+
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.
 

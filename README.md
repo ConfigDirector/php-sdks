@@ -43,11 +43,11 @@ autorestart=true
 stopsignal=TERM
 ```
 
-To run it from your own command, such as an Artisan or Symfony Console command, call `ConfigDirector::createStreamingProcess(...)->run()` with the arguments you give `createClient`.
+To run it from your own command, such as an Artisan or Symfony Console command, call `ConfigDirector::createStreamingProcess(...)->run()` with the arguments you give `createClient`. The [Laravel sample](samples/server-sdk/laravel/) runs it as `php artisan configdirector:stream`.
 
 ## Sample apps
 
-Small, runnable applications live under [`samples/`](samples/), grouped by the package they demonstrate. Start with the [Slim sample](samples/server-sdk/slim/) for the server SDK.
+Small, runnable applications live under [`samples/`](samples/), grouped by the package they demonstrate. Start with the [Slim sample](samples/server-sdk/slim/) for the server SDK, or the [Laravel sample](samples/server-sdk/laravel/), which also runs the streaming process as an Artisan command.
 
 ## Getting Help
 

@@ -7,7 +7,7 @@ PACKAGES := server-sdk openfeature-server-provider
 
 # Sample applications, each a Composer project under samples/<package>/<framework> that requires the packages
 # from this working tree through a path repository.
-SAMPLES := samples/server-sdk/slim
+SAMPLES := samples/server-sdk/slim samples/server-sdk/laravel
 
 # Every Composer project in this repository: the packages, then the samples. `install`, `verify-lock`, `format`,
 # `lint`, `audit` and `clean` run on each of them; `test` and `test-lowest` run on the packages only.

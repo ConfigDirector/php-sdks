@@ -1,0 +1,11 @@
+parameters:
+    level: max
+    paths:
+        - app
+        - bootstrap/app.php
+        - bootstrap/providers.php
+        - config
+        - public
+        - routes
+        - tests
+        - artisan

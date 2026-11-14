@@ -8,6 +8,7 @@ different web frameworks, grouped by the package they demonstrate.
 | Sample | Framework | Description |
 |---|---|---|
 | [slim/](server-sdk/slim/) | [Slim](https://www.slimframework.com) | Minimal PSR-7 app: one client per request from the container, per-request evaluation |
+| [laravel/](server-sdk/laravel/) | [Laravel](https://laravel.com) | A client per request from a scoped binding, and the streaming process as an Artisan command |
 
 Each sample is an independent Composer project with its own `composer.json` and `composer.lock`.
 Until the SDK's first release, a sample requires it from this working tree through a Composer path
