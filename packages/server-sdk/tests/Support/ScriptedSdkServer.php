@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ConfigDirector\Tests\Support;
 
 /**
+ * @phpstan-import-type RecordedRequest from RecordedRequests
  * @phpstan-type ScriptedAnswer array{
  *     status?: int,
  *     headers?: array<string, string>,
@@ -76,41 +77,11 @@ final class ScriptedSdkServer
     }
 
     /**
-     * @return list<array{method: string, path: string, headers: array<string, string>, body: mixed, bodyText: string}>
+     * @return list<RecordedRequest>
      */
     public function requestsReceived(): array
     {
-        $requestsFile = self::requestsFileIn($this->folder);
-        if (!is_file($requestsFile)) {
-            return [];
-        }
-
-        $requests = [];
-        foreach (file($requestsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
-            $request = json_decode($line, true, flags: JSON_THROW_ON_ERROR);
-            if (
-                !is_array($request)
-                || !is_string($request['method'] ?? null)
-                || !is_string($request['path'] ?? null)
-                || !is_array($request['headers'] ?? null)
-            ) {
-                throw new \RuntimeException("The scripted SDK server recorded an unreadable request: {$line}");
-            }
-
-            $headers = [];
-            foreach ($request['headers'] as $name => $value) {
-                $headers[(string) $name] = is_string($value) ? $value : '';
-            }
-            $requests[] = [
-                'method' => $request['method'],
-                'path' => $request['path'],
-                'headers' => $headers,
-                'body' => $request['body'] ?? null,
-                'bodyText' => is_string($request['bodyText'] ?? null) ? $request['bodyText'] : '',
-            ];
-        }
-
-        return $requests;
+        return RecordedRequests::in(self::requestsFileIn($this->folder));
     }
 
     public function stop(): void

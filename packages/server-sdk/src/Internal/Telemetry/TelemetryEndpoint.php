@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Telemetry;
 
+use ConfigDirector\Internal\Connection\JsonPostRequest;
 use ConfigDirector\Internal\Identity\SdkIdentity;
 use ConfigDirector\Metadata;
 
@@ -11,6 +12,7 @@ final readonly class TelemetryEndpoint
 {
     private const int TIME_LIMIT_MILLISECONDS = 5_000;
 
+    /** @var non-empty-string */
     public string $url;
 
     /** @var array<string, string> */
@@ -28,23 +30,14 @@ final readonly class TelemetryEndpoint
 
     public function answerToAReportOf(CollectedTelemetry $telemetry, int $reportedAtEpochMilliseconds): ReportAnswer
     {
-        $request = curl_init();
+        $request = JsonPostRequest::to(
+            $this->url,
+            $telemetry->reportJson($this->serverSdkKey, $this->metaContext, $reportedAtEpochMilliseconds),
+            $this->sdkIdentity,
+        );
         curl_setopt_array($request, [
-            CURLOPT_URL => $this->url,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $telemetry->reportJson(
-                $this->serverSdkKey,
-                $this->metaContext,
-                $reportedAtEpochMilliseconds,
-            ),
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Expect:'],
-            CURLOPT_USERAGENT => $this->sdkIdentity->userAgent(),
             CURLOPT_TIMEOUT_MS => self::TIME_LIMIT_MILLISECONDS,
             CURLOPT_CONNECTTIMEOUT_MS => self::TIME_LIMIT_MILLISECONDS,
-            CURLOPT_NOSIGNAL => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_WRITEFUNCTION => static fn(\CurlHandle $request, string $chunk): int => strlen($chunk),
         ]);
 

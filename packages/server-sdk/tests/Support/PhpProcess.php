@@ -21,12 +21,15 @@ final class PhpProcess
      * @param list<string> $arguments
      * @param array<string, string> $phpSettings
      * @param list<string> $commandPrefix
+     * @param array<string, string> $environment
      */
     public static function running(
         string $script,
         array $arguments,
         array $phpSettings = [],
         array $commandPrefix = [],
+        array $environment = [],
+        ?string $fileForStandardError = null,
     ): self {
         $phpOptions = [];
         foreach ($phpSettings as $setting => $value) {
@@ -35,8 +38,9 @@ final class PhpProcess
 
         $process = proc_open(
             [...$commandPrefix, PHP_BINARY, ...$phpOptions, $script, self::autoloadFile(), ...$arguments],
-            [1 => ['pipe', 'w'], 2 => STDERR],
+            [1 => ['pipe', 'w'], 2 => $fileForStandardError === null ? STDERR : ['file', $fileForStandardError, 'a']],
             $pipes,
+            env_vars: $environment === [] ? null : [...getenv(), ...$environment],
         );
         if ($process === false) {
             throw new \RuntimeException("The PHP process for {$script} could not be started.");
@@ -48,6 +52,11 @@ final class PhpProcess
     public function isRunning(): bool
     {
         return proc_get_status($this->process)['running'];
+    }
+
+    public function signal(int $signal): void
+    {
+        proc_terminate($this->process, $signal);
     }
 
     public function nextLineOfOutput(): string
@@ -71,6 +80,7 @@ final class PhpProcess
         return new FinishedPhpProcess(
             $output === false ? '' : $output,
             $status['signaled'] ? $status['termsig'] : null,
+            $status['signaled'] ? null : $status['exitcode'],
         );
     }
 

@@ -247,3 +247,56 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   SDK would not report as it was tracked logs a warning, the limit of 1,000 events does not apply,
   nothing is recorded after `dispose()`, and nothing is sent. `clearTrackedEvents()` forgets them,
   and `replaceValues` leaves them as they are.
+- `ConfigDirector::createStreamingProcess(...)` creates a `StreamingProcess` from the named
+  arguments `serverSdkKey`, `metadata`, `connection`, `logger`, `logLevel` and `telemetry`, without
+  making a network call or touching a file. Its `run()` keeps one streaming connection to
+  ConfigDirector open for a host and writes every change to the local store, so a change to the
+  targeting rules reaches the host's requests in about a second, where they otherwise wait for
+  the next polling interval. `createStreamingProcess` throws `ConfigDirectorValidationException`
+  for what `createClient` rejects outside offline mode, and for `ConnectionMode::Offline`.
+  `connection.pollingInterval` and `connection.timeout` change nothing about a streaming process.
+- The command `vendor/bin/configdirector-stream` runs a streaming process from the environment
+  variables `CONFIGDIRECTOR_SERVER_KEY`, which is required, and `CONFIGDIRECTOR_BASE_URL`,
+  `CONFIGDIRECTOR_STORAGE_PATH`, `CONFIGDIRECTOR_APP_NAME`, `CONFIGDIRECTOR_APP_VERSION` and
+  `CONFIGDIRECTOR_LOG_LEVEL`. A blank variable counts as not set, and the command takes no
+  arguments and reads no `.env` file. It writes its log to standard error, whatever PHP's
+  `error_log` setting, from the level `info`, so its first line names the folder of the local
+  store it keeps up to date. It exits with 0 after SIGTERM or SIGINT and with 1 otherwise: when
+  the key variable is not set or a setting is rejected, with the reason on standard error, and
+  when the streaming process stops because of a failure.
+- While the connection of a streaming process is open, no request of the host asks
+  ConfigDirector for values. A request reads a change once the streaming process has written
+  it to the local store, and a client that has lived longer than `telemetry.flushInterval` reads
+  it within a second. When the connection is down for longer than the polling interval of the
+  host's clients, their requests ask ConfigDirector by themselves again until it is back, and
+  they do the same once the streaming process has stopped.
+- While a streaming process runs, no request of the host sends telemetry: each client still
+  adds what it evaluated and tracked to the local store, and the streaming process sends one
+  report per `telemetry.flushInterval`, whether or not its connection is open. The reports carry
+  the `metadata` of the streaming process, so give it the `appName` and `appVersion` of the
+  application. When ConfigDirector refuses a report with a 4xx status other than 413 and 429, the
+  streaming process logs the warning a client logs, sends nothing for one hour and keeps
+  running. Once the streaming process is no longer running, the requests send again.
+- `run()` returns after SIGTERM or SIGINT, once it has sent the telemetry the local store holds.
+  This needs the pcntl extension, which the package suggests. While it runs, `run()` handles the
+  two signals itself, and it puts back the handlers that were there before it returns. Without
+  the extension, and on Windows, a signal ends the PHP process at once, and the requests send
+  what the local store holds.
+- `run()` throws `ConfigDirectorConnectionException`, with the `status`, when ConfigDirector
+  refuses the connection with a 4xx status other than 429, as it does for a server SDK key it
+  does not know. It throws `ConfigDirectorException` when another streaming process already
+  runs on the same local store, because a host needs one connection only, or when the local
+  store cannot be used. Each logs one error first. A streaming process that was killed does not
+  keep the next one from starting.
+- A streaming process opens its connection again by itself when ConfigDirector cannot be reached
+  or answers with another status, when the connection is closed, and when nothing arrives on it
+  for 45 seconds or no answer arrives within 30. Before each attempt it waits: 1 to 2 seconds
+  before the first, then twice as long with each attempt that fails, up to between 256 and 512
+  seconds, where the exact time within each range is drawn at random. The count starts over
+  once a connection has opened. When ConfigDirector names a time to wait, in the `Retry-After`
+  of a 429 or in the stream, the streaming process waits that long instead, for at least one
+  second and at most one hour. The first five attempts in a row are logged at `info` and the
+  later ones as warnings.
+- When the streaming process cannot write the values it received to the local store, it logs a
+  warning and opens its connection again to receive them once more, waiting longer before each
+  attempt until they are written.

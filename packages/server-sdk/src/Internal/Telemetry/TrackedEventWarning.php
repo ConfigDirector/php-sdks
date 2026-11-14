@@ -11,6 +11,12 @@ enum TrackedEventWarning
     case DetailsNotReportable;
     case ReportAlreadyFull;
 
+    public function messageOfTheFirstInABatch(): string
+    {
+        return $this->message()
+            . ' Further tracked events like it are not logged until the next telemetry batch is sent.';
+    }
+
     public function message(): string
     {
         return match ($this) {

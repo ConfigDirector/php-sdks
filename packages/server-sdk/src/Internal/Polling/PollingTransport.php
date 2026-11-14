@@ -6,6 +6,7 @@ namespace ConfigDirector\Internal\Polling;
 
 use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\Internal\Connection\UndeliveredPayload;
+use ConfigDirector\Internal\Identity\SessionId;
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\PollingPause;
 use ConfigDirector\Internal\LocalStore\RefreshLock;
@@ -202,7 +203,7 @@ final class PollingTransport
         $pollingIntervalMilliseconds = $this->pollingInterval->milliseconds();
         $sessionId = $storedPayload->sessionId
             ?? $this->store->pollingPause($this->endpoint->url)->sessionId
-            ?? self::newSessionId();
+            ?? SessionId::newlyGenerated();
         $pauseWhileThePollIsUnanswered = new PollingPause(
             $sessionId,
             $now,
@@ -235,7 +236,7 @@ final class PollingTransport
         return match ($answer->kind) {
             PollAnswerKind::Payload => PollAttempt::answeredWithAPayload(
                 new StoredPayload(
-                    self::payloadAfterReceiving($answer->payload, $storedPayload),
+                    StoredPayload::payloadAfterReceiving($answer->payload, $storedPayload),
                     $answeredAt,
                     $sessionId,
                 ),
@@ -355,39 +356,5 @@ final class PollingTransport
             : RetryAfterHeader::secondsNamedBy($answer->retryAfterHeader, $nowEpochMilliseconds);
 
         return ($retryAfterSeconds ?? 0) * 1_000;
-    }
-
-    /**
-     * @param array<array-key, mixed> $receivedPayload
-     *
-     * @return array<array-key, mixed>
-     */
-    private static function payloadAfterReceiving(array $receivedPayload, ?StoredPayload $storedPayload): array
-    {
-        if ($storedPayload === null || ($receivedPayload['kind'] ?? null) !== 'delta') {
-            return $receivedPayload;
-        }
-
-        $mergedPayload = array_replace($storedPayload->payload, $receivedPayload);
-        $mergedPayload['kind'] = 'full';
-        foreach (['configs', 'segments'] as $payloadSection) {
-            $storedSection = $storedPayload->payload[$payloadSection] ?? null;
-            $receivedSection = $receivedPayload[$payloadSection] ?? null;
-            $mergedPayload[$payloadSection] = array_replace(
-                is_array($storedSection) ? $storedSection : [],
-                is_array($receivedSection) ? $receivedSection : [],
-            );
-        }
-
-        return $mergedPayload;
-    }
-
-    private static function newSessionId(): string
-    {
-        $randomBytes = random_bytes(16);
-        $randomBytes[6] = chr(ord($randomBytes[6]) & 0x0F | 0x40);
-        $randomBytes[8] = chr(ord($randomBytes[8]) & 0x3F | 0x80);
-
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($randomBytes), 4));
     }
 }

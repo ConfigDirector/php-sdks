@@ -8,7 +8,7 @@ use Psr\Log\AbstractLogger;
 use Psr\Log\InvalidArgumentException;
 use Psr\Log\LogLevel;
 
-final class ErrorLogLogger extends AbstractLogger
+final class LineLogger extends AbstractLogger
 {
     private const array SEVERITY_BY_LEVEL = [
         LogLevel::DEBUG => 0,
@@ -21,13 +21,36 @@ final class ErrorLogLogger extends AbstractLogger
         LogLevel::EMERGENCY => 7,
     ];
 
-    private function __construct(private readonly int $lowestSeverityWritten) {}
+    /**
+     * @param \Closure(string $line): void $writeLine
+     */
+    private function __construct(
+        private readonly int $lowestSeverityWritten,
+        private readonly \Closure $writeLine,
+    ) {}
 
-    public static function writingFrom(string $lowestLevelWritten): ?self
+    public static function writingThroughErrorLogFrom(string $lowestLevelWritten): ?self
+    {
+        return self::writingFrom($lowestLevelWritten, static function (string $line): void {
+            error_log($line);
+        });
+    }
+
+    public static function writingToStandardErrorFrom(string $lowestLevelWritten): ?self
+    {
+        return self::writingFrom($lowestLevelWritten, static function (string $line): void {
+            fwrite(STDERR, $line . "\n");
+        });
+    }
+
+    /**
+     * @param \Closure(string $line): void $writeLine
+     */
+    private static function writingFrom(string $lowestLevelWritten, \Closure $writeLine): ?self
     {
         $lowestSeverityWritten = self::SEVERITY_BY_LEVEL[$lowestLevelWritten] ?? null;
 
-        return $lowestSeverityWritten === null ? null : new self($lowestSeverityWritten);
+        return $lowestSeverityWritten === null ? null : new self($lowestSeverityWritten, $writeLine);
     }
 
     /**
@@ -44,7 +67,7 @@ final class ErrorLogLogger extends AbstractLogger
             return;
         }
 
-        error_log(sprintf(
+        ($this->writeLine)(sprintf(
             '[ConfigDirector:php-server-sdk] %s: %s%s',
             $level,
             self::withPlaceholdersFilled((string) $message, $context),

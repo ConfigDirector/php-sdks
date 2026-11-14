@@ -10,6 +10,13 @@ final class RetryAfterHeader
 
     private function __construct() {}
 
+    public static function valueIn(string $headerLine): ?string
+    {
+        [$name, $value] = [...explode(':', $headerLine, 2), ''];
+
+        return strcasecmp(trim($name), 'Retry-After') === 0 ? trim($value) : null;
+    }
+
     public static function secondsNamedBy(string $headerValue, int $nowEpochMilliseconds): ?int
     {
         if (ctype_digit($headerValue)) {

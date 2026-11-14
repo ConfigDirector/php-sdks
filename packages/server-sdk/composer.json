@@ -30,6 +30,9 @@
         "phpstan/phpstan": "^2.3",
         "phpunit/phpunit": "^12.5"
     },
+    "suggest": {
+        "ext-pcntl": "Lets the streaming process stop on SIGTERM and SIGINT after sending the telemetry of the local store."
+    },
     "autoload": {
         "psr-4": {
             "ConfigDirector\\": "src/"
@@ -40,6 +43,9 @@
             "ConfigDirector\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/configdirector-stream"
+    ],
     "config": {
         "platform": {
             "php": "8.3.36"

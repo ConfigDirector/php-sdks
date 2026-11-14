@@ -12,6 +12,7 @@ use ConfigDirector\Internal\Connection\ServerSdkPayload;
 use ConfigDirector\Internal\Identity\SdkIdentity;
 use ConfigDirector\Internal\LocalStore\ExclusiveFileLock;
 use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
+use ConfigDirector\Internal\Telemetry\EventReporter;
 use ConfigDirector\Internal\Telemetry\LocalStoreTelemetry;
 use ConfigDirector\Internal\Telemetry\TelemetryEndpoint;
 use ConfigDirector\Internal\Time\ClientLifetime;
@@ -512,7 +513,17 @@ final class ClientTelemetryOverTimeTest extends TestCase
             new EventHandlers($this->logger),
             new LocalStoreTelemetry(
                 $localStore,
-                new TelemetryEndpoint($server->url, 'server-sdk-key', new Metadata(), SdkIdentity::ofTheServerSdk()),
+                new EventReporter(
+                    new TelemetryEndpoint(
+                        $server->url,
+                        'server-sdk-key',
+                        new Metadata(),
+                        SdkIdentity::ofTheServerSdk(),
+                    ),
+                    5_000,
+                    $this->clock,
+                    $this->logger,
+                ),
                 5_000,
                 self::FLUSH_INTERVAL_MILLISECONDS,
                 new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),

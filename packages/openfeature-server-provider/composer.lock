@@ -12,7 +12,7 @@
             "dist": {
                 "type": "path",
                 "url": "../server-sdk",
-                "reference": "e3d67c6ad0c4bbe3358c5a4d396651acdac3eab9"
+                "reference": "cef87dff27d6f2c2167bc6326dd4161ee657de2a"
             },
             "require": {
                 "ext-curl": "*",
@@ -25,6 +25,12 @@
                 "phpstan/phpstan": "^2.3",
                 "phpunit/phpunit": "^12.5"
             },
+            "suggest": {
+                "ext-pcntl": "Lets the streaming process stop on SIGTERM and SIGINT after sending the telemetry of the local store."
+            },
+            "bin": [
+                "bin/configdirector-stream"
+            ],
             "type": "library",
             "autoload": {
                 "psr-4": {

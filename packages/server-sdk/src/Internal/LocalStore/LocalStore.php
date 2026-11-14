@@ -31,6 +31,16 @@ final class LocalStore
         return new self(null, $logger);
     }
 
+    public function usableFolder(): ?string
+    {
+        return $this->usableFolder;
+    }
+
+    public function isHeldByAStreamingProcess(): bool
+    {
+        return $this->usableFolder !== null && StreamingProcessLock::isHeldIn($this->usableFolder);
+    }
+
     public function storedPayload(): ?StoredPayload
     {
         if ($this->usableFolder === null) {

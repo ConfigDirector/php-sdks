@@ -9,5 +9,6 @@ final readonly class FinishedPhpProcess
     public function __construct(
         public string $output,
         public ?int $terminatingSignal,
+        public ?int $exitCode,
     ) {}
 }

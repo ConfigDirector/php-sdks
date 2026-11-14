@@ -39,6 +39,39 @@ final readonly class StoredPayload
         return is_array($payload['configs'] ?? null);
     }
 
+    /**
+     * @param array<array-key, mixed> $receivedPayload
+     *
+     * @return array<array-key, mixed>
+     */
+    public static function payloadAfterReceiving(array $receivedPayload, ?self $storedPayload): array
+    {
+        if ($storedPayload === null || !self::isADelta($receivedPayload)) {
+            return $receivedPayload;
+        }
+
+        $mergedPayload = array_replace($storedPayload->payload, $receivedPayload);
+        $mergedPayload['kind'] = 'full';
+        foreach (['configs', 'segments'] as $payloadSection) {
+            $storedSection = $storedPayload->payload[$payloadSection] ?? null;
+            $receivedSection = $receivedPayload[$payloadSection] ?? null;
+            $mergedPayload[$payloadSection] = array_replace(
+                is_array($storedSection) ? $storedSection : [],
+                is_array($receivedSection) ? $receivedSection : [],
+            );
+        }
+
+        return $mergedPayload;
+    }
+
+    /**
+     * @param array<array-key, mixed> $payload
+     */
+    public static function isADelta(array $payload): bool
+    {
+        return ($payload['kind'] ?? null) === 'delta';
+    }
+
     public function toJson(): string
     {
         return json_encode(

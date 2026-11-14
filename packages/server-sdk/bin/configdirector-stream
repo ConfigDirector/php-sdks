@@ -1,0 +1,21 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use ConfigDirector\Internal\Streaming\StreamingCommand;
+
+$autoloadFiles = [
+    $_composer_autoload_path ?? '',
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+foreach ($autoloadFiles as $autoloadFile) {
+    if (is_file($autoloadFile)) {
+        require $autoloadFile;
+
+        break;
+    }
+}
+
+exit(StreamingCommand::exitCodeOfARunWith(getenv()));

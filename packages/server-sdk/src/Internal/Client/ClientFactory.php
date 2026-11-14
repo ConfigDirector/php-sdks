@@ -16,12 +16,12 @@ use ConfigDirector\Internal\Connection\LocalStoreConnection;
 use ConfigDirector\Internal\Connection\OfflineConnection;
 use ConfigDirector\Internal\Identity\SdkIdentity;
 use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
-use ConfigDirector\Internal\Logging\ErrorLogLogger;
 use ConfigDirector\Internal\Polling\PollingEndpoint;
 use ConfigDirector\Internal\Polling\PollingInterval;
 use ConfigDirector\Internal\Polling\PollingTransport;
 use ConfigDirector\Internal\Telemetry\ClientTelemetry;
 use ConfigDirector\Internal\Telemetry\DiscardedTelemetry;
+use ConfigDirector\Internal\Telemetry\EventReporter;
 use ConfigDirector\Internal\Telemetry\LocalStoreTelemetry;
 use ConfigDirector\Internal\Telemetry\TelemetryEndpoint;
 use ConfigDirector\Internal\Telemetry\TrackedEventRecordingTelemetry;
@@ -35,10 +35,6 @@ use Psr\Log\LogLevel;
 
 final class ClientFactory
 {
-    private const int MINIMUM_EVENT_QUEUE_LIMIT = 100;
-
-    private const int MAXIMUM_EVENT_QUEUE_LIMIT = 100_000;
-
     private function __construct() {}
 
     public static function clientIdentifiedAs(
@@ -54,8 +50,8 @@ final class ClientFactory
         $metadata ??= new Metadata();
         $connectionOptions ??= new ConnectionOptions();
         $telemetry ??= new TelemetryOptions();
-        $logger ??= self::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
-        self::rejectUnusableTelemetry($telemetry);
+        $logger ??= OptionRules::errorLogLoggerWritingFrom($logLevel ?? LogLevel::WARNING);
+        OptionRules::rejectUnusableTelemetry($telemetry);
         $eventHandlers = new EventHandlers($logger);
         [$connection, $clientTelemetry] = match ($connectionOptions->mode) {
             ConnectionMode::Offline => [
@@ -89,9 +85,9 @@ final class ClientFactory
      */
     public static function testClientServing(?array $values, ?int $timeout, ?LoggerInterface $logger): TestClient
     {
-        $logger ??= self::errorLogLoggerWritingFrom(LogLevel::WARNING);
+        $logger ??= OptionRules::errorLogLoggerWritingFrom(LogLevel::WARNING);
         $timeout ??= (new ConnectionOptions())->timeout;
-        self::rejectUnusableTimeout($timeout);
+        OptionRules::rejectUnusableTimeout($timeout);
         $eventHandlers = new EventHandlers($logger);
         $telemetry = new TrackedEventRecordingTelemetry($logger);
         $connection = InMemoryConnection::servingTheValues(
@@ -173,7 +169,12 @@ final class ClientFactory
             ),
             new LocalStoreTelemetry(
                 $localStore,
-                new TelemetryEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
+                new EventReporter(
+                    new TelemetryEndpoint($connectionOptions->url, $serverSdkKey, $metadata, $sdkIdentity),
+                    $telemetry->eventQueueLimit,
+                    $clock,
+                    $logger,
+                ),
                 $telemetry->eventQueueLimit,
                 $telemetry->flushInterval,
                 $clientLifetime,
@@ -203,91 +204,13 @@ final class ClientFactory
         }
     }
 
-    private static function errorLogLoggerWritingFrom(string $logLevel): LoggerInterface
-    {
-        return ErrorLogLogger::writingFrom($logLevel) ?? throw new ConfigDirectorValidationException(
-            "Invalid log level '{$logLevel}'. The log level must be one of the levels of Psr\\Log\\LogLevel, "
-            . "such as 'debug' or 'warning'.",
-        );
-    }
-
-    private static function rejectUnusableTimeout(int $timeoutMilliseconds): void
-    {
-        if ($timeoutMilliseconds <= 0) {
-            throw new ConfigDirectorValidationException(
-                "Invalid timeout '{$timeoutMilliseconds}'. The timeout must be a positive number of milliseconds.",
-            );
-        }
-    }
-
     private static function serverSdkKeyOfAUsableConnection(
         ?string $serverSdkKey,
         ConnectionOptions $connectionOptions,
     ): string {
-        if ($serverSdkKey === null || trim($serverSdkKey) === '') {
-            throw new ConfigDirectorValidationException(
-                'No server SDK key was provided, the client cannot be instantiated without a valid server SDK key',
-            );
-        }
-        if ($connectionOptions->file !== null || $connectionOptions->values !== null) {
-            throw new ConfigDirectorValidationException(
-                "The connection options 'file' and 'values' apply only when the connection mode is 'offline', but "
-                . "the mode is '{$connectionOptions->mode->value}'.",
-            );
-        }
-        self::rejectUnusableBaseUrl($connectionOptions->url);
-        self::rejectUnusableStoragePath($connectionOptions->storagePath);
-        self::rejectUnusableTimeout($connectionOptions->timeout);
+        $providedServerSdkKey = OptionRules::nonBlankServerSdkKey($serverSdkKey, 'the client cannot be instantiated');
+        OptionRules::rejectUnusableConnectionToConfigDirector($connectionOptions);
 
-        return $serverSdkKey;
-    }
-
-    private static function rejectUnusableBaseUrl(string $baseUrl): void
-    {
-        $urlParts = parse_url($baseUrl);
-        $scheme = strtolower($urlParts['scheme'] ?? '');
-        $isHttpUrl = in_array($scheme, ['http', 'https'], true) && ($urlParts['host'] ?? '') !== '';
-        $holdsSpacesOrControlCharacters = preg_match('/[\x00-\x20\x7F]/', $baseUrl) === 1;
-        if (!$isHttpUrl || $holdsSpacesOrControlCharacters) {
-            throw new ConfigDirectorValidationException(
-                "Invalid base URL '{$baseUrl}'. The base URL must be an http or https URL.",
-            );
-        }
-    }
-
-    private static function rejectUnusableStoragePath(?string $storagePath): void
-    {
-        if ($storagePath === null) {
-            return;
-        }
-
-        $isAbsolute = PHP_OS_FAMILY === 'Windows'
-            ? preg_match('/^(?:[A-Za-z]:[\\\\\/]|\\\\\\\\)/', $storagePath) === 1
-            : str_starts_with($storagePath, '/');
-        if (!$isAbsolute) {
-            throw new ConfigDirectorValidationException(
-                "Invalid storage path '{$storagePath}'. The storage path must be an absolute path.",
-            );
-        }
-    }
-
-    private static function rejectUnusableTelemetry(TelemetryOptions $telemetry): void
-    {
-        $eventQueueLimitIsInRange = $telemetry->eventQueueLimit >= self::MINIMUM_EVENT_QUEUE_LIMIT
-            && $telemetry->eventQueueLimit <= self::MAXIMUM_EVENT_QUEUE_LIMIT;
-        if (!$eventQueueLimitIsInRange) {
-            throw new ConfigDirectorValidationException(sprintf(
-                "Invalid telemetry event queue limit '%d'. It must be between %d and %d.",
-                $telemetry->eventQueueLimit,
-                self::MINIMUM_EVENT_QUEUE_LIMIT,
-                self::MAXIMUM_EVENT_QUEUE_LIMIT,
-            ));
-        }
-        if ($telemetry->flushInterval <= 0) {
-            throw new ConfigDirectorValidationException(
-                "Invalid telemetry flush interval '{$telemetry->flushInterval}'. "
-                . 'It must be a positive number of milliseconds.',
-            );
-        }
+        return $providedServerSdkKey;
     }
 }

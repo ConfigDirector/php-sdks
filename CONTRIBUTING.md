@@ -89,6 +89,19 @@ with a flush interval of one millisecond stands for the later request that sends
 `ClientTelemetryOverTimeTest` moves a settable clock instead of waiting. One test waits the five
 seconds a report is given for its answer.
 
+The streaming process tests of the server SDK stream from a scripted stream server,
+`packages/server-sdk/tests/Support/Processes/scripted-stream-server.php`, which holds one event stream
+open, answers heartbeats, telemetry reports and polls meanwhile, records what it received, and sends
+or closes the stream when the test tells it to. In `StreamingProcessTest` and `StreamingCommandTest`
+the streaming process is a PHP process of its own, started from
+`packages/server-sdk/tests/Processes/run-a-streaming-process.php` or from
+`packages/server-sdk/bin/configdirector-stream`, and each request is a PHP process as well.
+`StreamingProcessOverTimeTest` moves a settable clock instead of waiting, and calls the streaming
+process one step at a time. There, a stream shows a sign of life through an event that carries no
+payload, because the error it logs tells the test that the bytes arrived. The tests that stop a
+streaming process with a signal need the pcntl extension and are skipped without it, as on Windows.
+CI installs it on Ubuntu and macOS, and `make check-floor` builds it into its image.
+
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.
 
