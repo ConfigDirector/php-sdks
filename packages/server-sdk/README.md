@@ -10,7 +10,7 @@ PHP server SDK for [ConfigDirector](https://www.configdirector.com), remote conf
 composer require configdirector/server-sdk
 ```
 
-The SDK needs PHP 8.3 or later with the curl and JSON extensions.
+The SDK needs a 64-bit PHP 8.3 or later with the curl and JSON extensions.
 
 ## Configure
 

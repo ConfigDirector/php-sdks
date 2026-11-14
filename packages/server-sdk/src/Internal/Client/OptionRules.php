@@ -98,9 +98,11 @@ final class OptionRules
         $scheme = strtolower($urlParts['scheme'] ?? '');
         $isHttpUrl = in_array($scheme, ['http', 'https'], true) && ($urlParts['host'] ?? '') !== '';
         $holdsSpacesOrControlCharacters = preg_match('/[\x00-\x20\x7F]/', $baseUrl) === 1;
-        if (!$isHttpUrl || $holdsSpacesOrControlCharacters) {
+        $holdsAQueryOrAFragment = isset($urlParts['query']) || isset($urlParts['fragment']);
+        if (!$isHttpUrl || $holdsSpacesOrControlCharacters || $holdsAQueryOrAFragment) {
             throw new ConfigDirectorValidationException(
-                "Invalid base URL '{$baseUrl}'. The base URL must be an http or https URL.",
+                "Invalid base URL '{$baseUrl}'. The base URL must be an http or https URL without a query or a "
+                . 'fragment.',
             );
         }
     }

@@ -106,7 +106,8 @@ last with the cycle collector off, so that a client is freed when it is disposed
 `SourceOfTheSdkTest` reads the source for calls to functions of PHP extensions that `composer.json`
 does not require, and fails on one without a `function_exists` check in its file. The development
 dependencies bring a polyfill of the ctype extension, so the suite itself cannot notice such a call.
-It also fails on `unserialize`, `eval`, `include` or `require` anywhere under `src/`.
+It also fails on `unserialize`, `eval`, `include` or `require` anywhere under `src/`, and when
+`composer.json` no longer requires a 64-bit PHP.
 
 `make benchmark` measures what the server SDK costs a request: `createClient`, `initialize()`, reads
 and `dispose()`, each request in a PHP process of its own, against a local store that holds 200

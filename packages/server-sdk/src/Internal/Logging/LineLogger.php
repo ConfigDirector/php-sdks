@@ -10,6 +10,11 @@ use Psr\Log\LogLevel;
 
 final class LineLogger extends AbstractLogger
 {
+    private const int MOST_BYTES_WRITTEN_OF_ONE_VALUE = 1_024;
+
+    private const string START_OF_A_CHARACTER_CUT_IN_TWO
+        = '/(?:[\xC0-\xDF]|[\xE0-\xEF][\x80-\xBF]?|[\xF0-\xF7][\x80-\xBF]{0,2})\z/';
+
     private const array SEVERITY_BY_LEVEL = [
         LogLevel::DEBUG => 0,
         LogLevel::INFO => 1,
@@ -89,7 +94,9 @@ final class LineLogger extends AbstractLogger
     {
         $textByPlaceholder = [];
         foreach ($context as $name => $value) {
-            $textByPlaceholder['{' . $name . '}'] = self::withControlCharactersAsSpaces(self::textOf($value));
+            $textByPlaceholder['{' . $name . '}'] = self::withControlCharactersAsSpaces(
+                self::cutShortPastTheMostBytesWritten(self::textOf($value)),
+            );
         }
 
         return strtr($message, $textByPlaceholder);
@@ -104,6 +111,19 @@ final class LineLogger extends AbstractLogger
         $json = json_encode($value, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         return $json === false ? get_debug_type($value) : $json;
+    }
+
+    private static function cutShortPastTheMostBytesWritten(string $text): string
+    {
+        if (strlen($text) <= self::MOST_BYTES_WRITTEN_OF_ONE_VALUE) {
+            return $text;
+        }
+
+        $firstBytes = substr($text, 0, self::MOST_BYTES_WRITTEN_OF_ONE_VALUE);
+        $withoutACharacterCutInTwo = preg_replace(self::START_OF_A_CHARACTER_CUT_IN_TWO, '', $firstBytes)
+            ?? $firstBytes;
+
+        return $withoutACharacterCutInTwo . '…';
     }
 
     private static function withControlCharactersAsSpaces(string $text): string

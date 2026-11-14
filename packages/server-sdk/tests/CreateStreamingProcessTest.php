@@ -75,6 +75,17 @@ final class CreateStreamingProcessTest extends TestCase
         );
     }
 
+    public function testAUrlWithAQueryIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createStreamingProcess(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: 'https://sdk-proxy.example.com?tenant=1'),
+            logger: new RecordingLogger(),
+        );
+    }
+
     public function testARejectedUrlKeepsTheServerSdkKeyOutOfTheStackTrace(): void
     {
         try {

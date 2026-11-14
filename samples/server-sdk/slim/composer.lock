@@ -12,12 +12,13 @@
             "dist": {
                 "type": "path",
                 "url": "../../../packages/server-sdk",
-                "reference": "cef87dff27d6f2c2167bc6326dd4161ee657de2a"
+                "reference": "3d94e92e8675b940262892760ee32bdb7c9c9418"
             },
             "require": {
                 "ext-curl": "*",
                 "ext-json": "*",
                 "php": "^8.3",
+                "php-64bit": "*",
                 "psr/log": "^2.0 || ^3.0"
             },
             "require-dev": {

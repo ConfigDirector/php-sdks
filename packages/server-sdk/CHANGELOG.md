@@ -9,11 +9,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The package requires a 64-bit PHP (`php-64bit`), which its rollout hash and its times in
+  milliseconds need, so Composer refuses to install it on a 32-bit PHP.
 - `ConfigDirector::createClient(...)` creates a `ConfigDirectorClient` from the named arguments
   `serverSdkKey`, `metadata`, `connection`, `logger`, `logLevel`, `telemetry` and `hooks`, without
   making a network call or touching a file. It throws `ConfigDirectorValidationException` when,
   outside offline mode only, the server SDK key is missing or blank, `connection.file` or
-  `connection.values` is given, `connection.url` is not an http or https URL,
+  `connection.values` is given, `connection.url` is not an http or https URL or carries a query
+  or a fragment,
   `connection.storagePath` is not an absolute path or `connection.timeout` is zero or less; when
   `telemetry.flushInterval` is zero or less; or when `telemetry.eventQueueLimit` is outside 100 to
   100,000.
@@ -72,7 +75,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   polling interval. After a 4xx answer other than 429 it does not ask for one hour, or for the
   polling interval when that is longer, and after a 429 for the longer of its `Retry-After`,
   counted for at most one hour, and the polling interval. Each failed request logs one error with
-  a `ConfigDirectorConnectionException`.
+  a `ConfigDirectorConnectionException`. The error of a 4xx answer other than 429, and the
+  message of its exception, name the time the host does not ask: one hour, or the polling
+  interval in minutes when that is longer.
 - The local store is a folder named after the SHA-256 digest of the server SDK key, inside
   `connection.storagePath`, which the SDK creates when it is missing. Without a `storagePath` it
   is inside `<system temp directory>/configdirector-<user ID>` on Linux and macOS, where the user
@@ -232,7 +237,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   more or less. A `logLevel` that is not a PSR-3 level throws `ConfigDirectorValidationException`.
   `logLevel` has no effect when a `logger` is given. The default logger writes every message on
   one line, with a space in place of each control character of a value it fills in, such as a
-  line break or an escape character.
+  line break or an escape character, and of a value longer than 1,024 bytes it writes the
+  characters that fit in the first 1,024 bytes, followed by `…`. A `logger` you pass in receives
+  every value whole.
 - `ConfigDirectorException` is the base class of every exception of the SDK, including
   `ConfigDirectorValidationException`, `ConfigDirectorInitializationException` and
   `ConfigDirectorConnectionException`. When one of them has a cause in `getPrevious()` that the

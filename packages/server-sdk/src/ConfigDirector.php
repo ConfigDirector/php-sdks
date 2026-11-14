@@ -45,8 +45,9 @@ final class ConfigDirector
      *
      * @throws ConfigDirectorValidationException Outside offline mode, when the server SDK key is
      *     missing or blank, `$connection->file` or `$connection->values` is given,
-     *     `$connection->url` is not an http or https URL, `$connection->storagePath` is not an
-     *     absolute path, or `$connection->timeout` is zero or less. In offline mode, when both
+     *     `$connection->url` is not an http or https URL or carries a query or a fragment,
+     *     `$connection->storagePath` is not an absolute path, or `$connection->timeout` is zero or
+     *     less. In offline mode, when both
      *     `$connection->file` and `$connection->values` are given, or `$connection->values` holds
      *     a value the SDK cannot serve, such as `null`, a float that is not finite or an object
      *     other than `stdClass`, or a blank config key. In every mode, when a `$telemetry` setting
@@ -110,8 +111,9 @@ final class ConfigDirector
      *
      * @throws ConfigDirectorValidationException When the server SDK key is missing or blank, the
      *     connection mode is offline, `$connection->file` or `$connection->values` is given,
-     *     `$connection->url` is not an http or https URL, `$connection->storagePath` is not an
-     *     absolute path, `$connection->timeout` is zero or less, a `$telemetry` setting is out of
+     *     `$connection->url` is not an http or https URL or carries a query or a fragment,
+     *     `$connection->storagePath` is not an absolute path, `$connection->timeout` is zero or
+     *     less, a `$telemetry` setting is out of
      *     range, or `$logLevel` is not a PSR-3 level and no `$logger` is given.
      */
     public static function createStreamingProcess(

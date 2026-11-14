@@ -328,6 +328,36 @@ final class ClientInitializationTest extends TestCase
         self::assertSame([401], $connectionErrorStatuses);
     }
 
+    public function testAPollRefusedWithA401UnderAPollingIntervalOfOneHourAndOneSecondIsLoggedAsNotSentAgainFor61Minutes(): void
+    {
+        $server = $this->serverAnswering([['status' => 401, 'body' => 'Unauthorized']]);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(
+                pollingInterval: 3_601,
+                url: $server->url,
+                storagePath: $this->storagePath,
+            ),
+        );
+
+        $this->expectOutputRegex('/\A(?=.*for 61 minutes\..*for 61 minutes\.)(?!.*one hour)[^\r\n]*\R\z/');
+
+        $client->initialize();
+    }
+
+    public function testAPollRefusedWithA401UnderAPollingIntervalOfFiveMinutesIsLoggedAsNotSentAgainForOneHour(): void
+    {
+        $server = $this->serverAnswering([['status' => 401, 'body' => 'Unauthorized']]);
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: $server->url, storagePath: $this->storagePath),
+        );
+
+        $this->expectOutputRegex('/\A(?=.*for one hour\..*for one hour\.)[^\r\n]*\R\z/');
+
+        $client->initialize();
+    }
+
     public function testAPollRefusedWithA503FiresNoConnectionError(): void
     {
         $server = $this->serverAnswering([['status' => 503]]);

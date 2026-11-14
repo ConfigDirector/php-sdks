@@ -102,6 +102,28 @@ final class CreateClientTest extends TestCase
         );
     }
 
+    public function testAUrlWithAQueryIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: 'https://sdk-proxy.example.com?tenant=1'),
+            logger: new RecordingLogger(),
+        );
+    }
+
+    public function testAUrlWithAFragmentIsRejected(): void
+    {
+        $this->expectException(ConfigDirectorValidationException::class);
+
+        ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: 'https://sdk-proxy.example.com/configdirector#section'),
+            logger: new RecordingLogger(),
+        );
+    }
+
     public function testAUrlWithASpaceIsRejected(): void
     {
         $this->expectException(ConfigDirectorValidationException::class);

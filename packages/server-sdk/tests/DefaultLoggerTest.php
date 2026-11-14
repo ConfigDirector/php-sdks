@@ -132,6 +132,62 @@ final class DefaultLoggerTest extends SampleConfigsTestCase
         $client->getValue('integer-config', 10, new Context(id: 'device-1', kind: "Device\e[2J\0rest of the kind"));
     }
 
+    public function testTheFirst1024BytesOfAConfigKeyOf5000BytesAreWrittenBeforeAnEllipsis(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::DEBUG,
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex("/'k{1024}…'/");
+
+        $client->getValue(str_repeat('k', 5_000), 10);
+    }
+
+    public function testAConfigKeyOf1024BytesIsWrittenWhole(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::DEBUG,
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex("/'k{1024}'/");
+
+        $client->getValue(str_repeat('k', 1_024), 10);
+    }
+
+    public function testACharacterThatThe1024thByteWouldCutInTwoIsLeftOutBeforeTheEllipsis(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::DEBUG,
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex("/'ké{511}…'/u");
+
+        $client->getValue('k' . str_repeat('é', 2_500), 10);
+    }
+
+    public function testACharacterThatEndsOnThe1024thByteIsWrittenBeforeTheEllipsis(): void
+    {
+        $client = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: self::connectionToTheSdkServer(),
+            logLevel: LogLevel::DEBUG,
+        );
+        $client->initialize();
+
+        $this->expectOutputRegex("/'é{512}…'/u");
+
+        $client->getValue(str_repeat('é', 2_500), 10);
+    }
+
     public function testAnErrorEndsWithTheClassAndMessageOfItsException(): void
     {
         $client = ConfigDirector::createClient(

@@ -278,13 +278,14 @@ final class PollingTransport
             ),
             PollAnswerKind::RefusedUnrecoverably => $this->failedPollAttempt(
                 $refreshLock,
-                $pauseAfterTheFailedPollOf(max($pollingIntervalMilliseconds, self::ONE_HOUR_MILLISECONDS)),
+                $pauseAfterTheFailedPollOf($this->millisecondsPollingPausesAfterAnUnrecoverableRefusal()),
                 new ConfigDirectorConnectionException(
                     sprintf(
                         'Connection failed with status: %d%s. This is an unrecoverable error, the SDK will not '
-                        . 'connect again for one hour.',
+                        . 'connect again for %s.',
                         $answer->status,
                         $answer->detail === '' ? '' : " ({$answer->detail})",
+                        $this->pauseAfterAnUnrecoverableRefusalInWords(),
                     ),
                     $answer->status,
                 ),
@@ -353,11 +354,28 @@ final class PollingTransport
         }
 
         $this->logger->error(
-            '[PollingTransport] The connection encountered an unrecoverable error and will not be retried for one '
-            . 'hour. Configs will not receive updates until then.',
+            sprintf(
+                '[PollingTransport] The connection encountered an unrecoverable error and will not be retried for '
+                . '%s. Configs will not receive updates until then.',
+                $this->pauseAfterAnUnrecoverableRefusalInWords(),
+            ),
             ['exception' => $pollAttempt->failure],
         );
         ($this->reportUnrecoverableError)($pollAttempt->failure);
+    }
+
+    private function millisecondsPollingPausesAfterAnUnrecoverableRefusal(): int
+    {
+        return max($this->pollingInterval->milliseconds(), self::ONE_HOUR_MILLISECONDS);
+    }
+
+    private function pauseAfterAnUnrecoverableRefusalInWords(): string
+    {
+        $pauseMilliseconds = $this->millisecondsPollingPausesAfterAnUnrecoverableRefusal();
+
+        return $pauseMilliseconds === self::ONE_HOUR_MILLISECONDS
+            ? 'one hour'
+            : sprintf('%d minutes', (int) ceil($pauseMilliseconds / 60_000));
     }
 
     private static function failureWithStatus(?int $status): ConfigDirectorConnectionException

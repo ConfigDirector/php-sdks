@@ -32,6 +32,15 @@ final class SourceOfTheSdkTest extends TestCase
         self::assertSame([], $uncheckedCalls);
     }
 
+    public function testThePackageRequiresA64BitPhp(): void
+    {
+        $composerJson = json_decode((string) file_get_contents(dirname(__DIR__) . '/composer.json'), true);
+
+        self::assertIsArray($composerJson);
+        self::assertIsArray($composerJson['require']);
+        self::assertArrayHasKey('php-64bit', $composerJson['require']);
+    }
+
     public function testTheSourceNeverUnserializesEvaluatesOrIncludesAnything(): void
     {
         $packageFolder = dirname(__DIR__);

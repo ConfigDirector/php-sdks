@@ -21,6 +21,7 @@
     ],
     "require": {
         "php": "^8.3",
+        "php-64bit": "*",
         "ext-curl": "*",
         "ext-json": "*",
         "psr/log": "^2.0 || ^3.0"

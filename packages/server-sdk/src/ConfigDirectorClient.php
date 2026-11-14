@@ -205,7 +205,8 @@ interface ConfigDirectorClient
      *   {@see evaluate()} or a watch evaluates a config, before the read returns.
      * - `connectionError`: called with a {@see ConnectionErrorEvent} when ConfigDirector refuses
      *   a request with a 4xx status other than 429, for example because the server SDK key is
-     *   wrong. The SDK then does not ask ConfigDirector again for one hour. It is called in the
+     *   wrong. The SDK then does not ask ConfigDirector again for one hour, or for the polling
+     *   interval when that is longer. It is called in the
      *   process that sent the request: during {@see initialize()}, when the client is disposed
      *   of, or during a read of a long-lived client. The client of a test client also has it called
      *   by {@see \ConfigDirector\Testing\TestClient::failInitialization()}.
