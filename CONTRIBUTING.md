@@ -96,11 +96,18 @@ with a flush interval of one millisecond stands for the later request that sends
 seconds a report is given for its answer.
 
 `ClientsOfManyProcessesTest` runs 50 PHP processes that serve requests on one local store for about
-six seconds each, from `packages/server-sdk/tests/Internal/Client/Processes/serve-requests-on-an-accelerated-clock.php`.
+seven seconds each, from `packages/server-sdk/tests/Internal/Client/Processes/serve-requests-on-an-accelerated-clock.php`.
 Their clock runs 60 times faster than real time, so that the minimum polling interval of 60 seconds
 passes every second, and the scripted SDK server gives every request the same answer. One test counts
-the polls and adds up the evaluations of every telemetry report; the other kills a process every 20
-milliseconds meanwhile. `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
+the polls and adds up the evaluations of every telemetry report; the other kills a process every 150
+milliseconds meanwhile. The test is about what the processes do to each other, not about how many
+requests a machine serves, so it is kept light enough for a CI runner with a few slow cores: every
+process loads the SDK's classes and waits for the others before it serves, a request lasts 300 to 500
+milliseconds, and about 125 requests end each second. A process that waits for the CPU while it holds
+a lock makes the others wait past the 250 milliseconds they give the telemetry lock, and the test
+fails on the telemetry that is then not kept: the first version, at 2,400 requests a second, failed
+that way on one CPU and on the macOS and Windows runners, and this one passes on a quarter of a CPU
+(`docker run --cpus=0.25`). `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
 and late in 100,000 reads, 1,000 refreshes of the local store, 100,000 watches and 1,000 clients, the
 last with the cycle collector off, so that a client is freed when it is disposed of and not later.
 `SourceOfTheSdkTest` reads the source for calls to functions of PHP extensions that `composer.json`

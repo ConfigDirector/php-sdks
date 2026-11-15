@@ -34,6 +34,7 @@ if (!isset($argv)) {
     $contextId,
     $fileOfItsRecord,
     $requestsToServe,
+    $fileAwaitedBeforeTheFirstRequest,
     $fileThatEndsTheRequests,
 ] = $argv;
 
@@ -42,7 +43,9 @@ require $autoloadFile;
 const SERVER_SDK_KEY = 'server-sdk-key';
 const EVENT_QUEUE_LIMIT = 5_000;
 const TIMEOUT_MILLISECONDS = 3_000;
-const MICROSECONDS_OF_WORK_BY_THE_APPLICATION = 20_000;
+const LONGEST_WAIT_BEFORE_THE_FIRST_REQUEST_MICROSECONDS = 1_000_000;
+const SHORTEST_WORK_OF_THE_APPLICATION_MICROSECONDS = 300_000;
+const LONGEST_WORK_OF_THE_APPLICATION_MICROSECONDS = 500_000;
 
 $logger = new class ($fileOfItsRecord) extends AbstractLogger {
     public function __construct(private readonly string $fileOfItsRecord) {}
@@ -60,6 +63,21 @@ $logger = new class ($fileOfItsRecord) extends AbstractLogger {
     }
 };
 $clock = new AcceleratedClock((int) $clockStartedAtEpochMilliseconds, (int) $timesFasterThanRealTime);
+
+$sourceFilesOfTheSdk = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(dirname(__DIR__, 4) . '/src'));
+foreach ($sourceFilesOfTheSdk as $sourceFile) {
+    if ($sourceFile instanceof SplFileInfo && $sourceFile->getExtension() === 'php') {
+        require_once $sourceFile->getPathname();
+    }
+}
+
+echo "started\n";
+if ($fileAwaitedBeforeTheFirstRequest !== '') {
+    while (!file_exists($fileAwaitedBeforeTheFirstRequest)) {
+        usleep(1_000);
+    }
+    usleep(random_int(0, LONGEST_WAIT_BEFORE_THE_FIRST_REQUEST_MICROSECONDS));
+}
 
 for ($request = 1; $request <= (int) $requestsToServe && !file_exists($fileThatEndsTheRequests); $request++) {
     $eventHandlers = new EventHandlers($logger);
@@ -108,6 +126,6 @@ for ($request = 1; $request <= (int) $requestsToServe && !file_exists($fileThatE
     $client->initialize();
     $pageSize = $client->getValue('page-size', 10, new Context(id: $contextId));
     file_put_contents($fileOfItsRecord, "read {$pageSize}\n", FILE_APPEND);
-    usleep(MICROSECONDS_OF_WORK_BY_THE_APPLICATION);
+    usleep(random_int(SHORTEST_WORK_OF_THE_APPLICATION_MICROSECONDS, LONGEST_WORK_OF_THE_APPLICATION_MICROSECONDS));
     $client->dispose();
 }

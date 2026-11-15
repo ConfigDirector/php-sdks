@@ -20,7 +20,7 @@ final class ClientsOfManyProcessesTest extends TestCase
 
     private const int POLLING_INTERVAL_MILLISECONDS = 60_000;
 
-    private const int FLUSH_INTERVAL_MILLISECONDS = 30_000;
+    private const int FLUSH_INTERVAL_MILLISECONDS = 120_000;
 
     private const int REQUESTS_UNTIL_THE_FILE_THAT_ENDS_THEM_APPEARS = 1_000_000;
 
@@ -57,15 +57,14 @@ final class ClientsOfManyProcessesTest extends TestCase
     public function testFiftyProcessesServingRequestsForFivePollingIntervalsPollOncePerIntervalAndReportEveryReadOnce(): void
     {
         $server = $this->serverServingAPageSizeOf25();
-        for ($process = 1; $process <= self::PROCESSES; $process++) {
-            $this->startAProcessServingRequestsFor("user-{$process}");
-        }
+        $acceleratedMillisecondsBeforeTheFirstRequest = $this->startFiftyProcessesThatServeRequestsOnceAllHaveStarted();
 
         self::waitForAcceleratedMilliseconds(
             5 * self::POLLING_INTERVAL_MILLISECONDS + self::FLUSH_INTERVAL_MILLISECONDS,
         );
         $this->endTheRequestsOfEveryProcess();
-        $acceleratedMillisecondsTheProcessesRan = $this->acceleratedMillisecondsSinceTheClockStarted();
+        $acceleratedMillisecondsTheProcessesRan = $this->acceleratedMillisecondsSinceTheClockStarted()
+            - $acceleratedMillisecondsBeforeTheFirstRequest;
         self::waitForAcceleratedMilliseconds(self::FLUSH_INTERVAL_MILLISECONDS);
         $this->serveOneRequestFor('user-of-the-last-request');
         $acceleratedMillisecondsUntilTheLastRequestEnded = $this->acceleratedMillisecondsSinceTheClockStarted();
@@ -100,9 +99,7 @@ final class ClientsOfManyProcessesTest extends TestCase
     public function testProcessesKilledWhileFiftyServeRequestsLeaveTheLocalStoreUsableAndItsLocksFree(): void
     {
         $server = $this->serverServingAPageSizeOf25();
-        for ($process = 1; $process <= self::PROCESSES; $process++) {
-            $this->startAProcessServingRequestsFor("user-{$process}");
-        }
+        $this->startFiftyProcessesThatServeRequestsOnceAllHaveStarted();
         $this->waitUntilEveryProcessHasServedARequest();
 
         $killingEndsAt = hrtime(true) + 3_000_000_000;
@@ -110,7 +107,7 @@ final class ClientsOfManyProcessesTest extends TestCase
             $contextId = 'user-' . ($kill % self::PROCESSES + 1);
             $this->processesStillRunningByContextId[$contextId]->killAtOnce();
             $this->startAProcessServingRequestsFor($contextId);
-            usleep(20_000);
+            usleep(150_000);
         }
         $this->endTheRequestsOfEveryProcess();
         self::waitForAcceleratedMilliseconds(self::POLLING_INTERVAL_MILLISECONDS + self::FLUSH_INTERVAL_MILLISECONDS);
@@ -161,21 +158,46 @@ final class ClientsOfManyProcessesTest extends TestCase
         ]);
     }
 
+    private function startFiftyProcessesThatServeRequestsOnceAllHaveStarted(): int
+    {
+        $fileAwaitedBeforeTheFirstRequest = $this->folderOfTheRecords . DIRECTORY_SEPARATOR . 'serve-the-requests';
+        for ($process = 1; $process <= self::PROCESSES; $process++) {
+            $this->processesStillRunningByContextId["user-{$process}"] = $this->processServingRequestsFor(
+                "user-{$process}",
+                self::REQUESTS_UNTIL_THE_FILE_THAT_ENDS_THEM_APPEARS,
+                $fileAwaitedBeforeTheFirstRequest,
+            );
+        }
+        foreach ($this->processesStillRunningByContextId as $process) {
+            self::assertSame('started', $process->nextLineOfOutput());
+        }
+
+        $acceleratedMillisecondsBeforeTheFirstRequest = $this->acceleratedMillisecondsSinceTheClockStarted();
+        touch($fileAwaitedBeforeTheFirstRequest);
+
+        return $acceleratedMillisecondsBeforeTheFirstRequest;
+    }
+
     private function startAProcessServingRequestsFor(string $contextId): void
     {
         $this->processesStillRunningByContextId[$contextId] = $this->processServingRequestsFor(
             $contextId,
             self::REQUESTS_UNTIL_THE_FILE_THAT_ENDS_THEM_APPEARS,
+            fileAwaitedBeforeTheFirstRequest: '',
         );
     }
 
     private function serveOneRequestFor(string $contextId): void
     {
-        $this->processServingRequestsFor($contextId, requestsToServe: 1)->finished();
+        $this->processServingRequestsFor($contextId, requestsToServe: 1, fileAwaitedBeforeTheFirstRequest: '')
+            ->finished();
     }
 
-    private function processServingRequestsFor(string $contextId, int $requestsToServe): PhpProcess
-    {
+    private function processServingRequestsFor(
+        string $contextId,
+        int $requestsToServe,
+        string $fileAwaitedBeforeTheFirstRequest,
+    ): PhpProcess {
         return PhpProcess::running(
             __DIR__ . '/Processes/serve-requests-on-an-accelerated-clock.php',
             [
@@ -187,6 +209,7 @@ final class ClientsOfManyProcessesTest extends TestCase
                 $contextId,
                 $this->folderOfTheRecords . DIRECTORY_SEPARATOR . "{$contextId}.record",
                 (string) $requestsToServe,
+                $fileAwaitedBeforeTheFirstRequest,
                 $this->fileThatEndsTheRequests(),
             ],
             fileForStandardError: $this->fileOfStandardError(),

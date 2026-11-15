@@ -6,9 +6,7 @@ namespace ConfigDirector\Internal\LocalStore;
 
 final class ExclusiveFileLock
 {
-    private const int LONGEST_PAUSE_AFTER_THE_FIRST_ATTEMPT_MICROSECONDS = 250;
-
-    private const int LONGEST_PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS = 1_000;
+    private const int LARGEST_RANDOM_NUMBER_DRAWN = 1_000_000;
 
     /**
      * @param resource|null $lockFile
@@ -28,8 +26,7 @@ final class ExclusiveFileLock
         }
 
         $deadline = hrtime(true) + $timeoutMilliseconds * 1_000_000;
-        $longestPauseMicroseconds = self::LONGEST_PAUSE_AFTER_THE_FIRST_ATTEMPT_MICROSECONDS;
-        while (!flock($lockFile, LOCK_EX | LOCK_NB, $isHeldByAnotherProcess)) {
+        for ($attempt = 1; !flock($lockFile, LOCK_EX | LOCK_NB, $isHeldByAnotherProcess); $attempt++) {
             if ($isHeldByAnotherProcess !== 1) {
                 fclose($lockFile);
 
@@ -41,11 +38,8 @@ final class ExclusiveFileLock
                 return UnacquiredFileLock::HeldPastTheTimeout;
             }
 
-            usleep(random_int(intdiv($longestPauseMicroseconds, 2), $longestPauseMicroseconds));
-            $longestPauseMicroseconds = min(
-                2 * $longestPauseMicroseconds,
-                self::LONGEST_PAUSE_BETWEEN_ATTEMPTS_MICROSECONDS,
-            );
+            $randomFraction = random_int(0, self::LARGEST_RANDOM_NUMBER_DRAWN) / self::LARGEST_RANDOM_NUMBER_DRAWN;
+            usleep(LockAttemptPause::microsecondsAfterAttempt($attempt, $randomFraction));
         }
 
         return new self($lockFile);
