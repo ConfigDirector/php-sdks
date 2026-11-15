@@ -48,14 +48,7 @@ const SHORTEST_WORK_OF_THE_APPLICATION_MICROSECONDS = 300_000;
 const LONGEST_WORK_OF_THE_APPLICATION_MICROSECONDS = 500_000;
 
 $logger = new class ($fileOfItsRecord) extends AbstractLogger {
-    private int $timesToldTheTelemetryLockWasNotTaken = 0;
-
     public function __construct(private readonly string $fileOfItsRecord) {}
-
-    public function timesToldTheTelemetryLockWasNotTaken(): int
-    {
-        return $this->timesToldTheTelemetryLockWasNotTaken;
-    }
 
     /**
      * @param array<array-key, mixed> $context
@@ -63,10 +56,7 @@ $logger = new class ($fileOfItsRecord) extends AbstractLogger {
     #[Override]
     public function log($level, string|Stringable $message, array $context = []): void
     {
-        $file = $context['file'] ?? null;
-        if ($level === LogLevel::WARNING && is_string($file) && basename($file) === 'telemetry.lock') {
-            $this->timesToldTheTelemetryLockWasNotTaken++;
-        } elseif ($level === LogLevel::WARNING || $level === LogLevel::ERROR) {
+        if ($level === LogLevel::WARNING || $level === LogLevel::ERROR) {
             $scalarsOfTheContext = json_encode(array_filter($context, is_scalar(...)));
             file_put_contents($this->fileOfItsRecord, "logged {$message} {$scalarsOfTheContext}\n", FILE_APPEND);
         }
@@ -138,11 +128,5 @@ for ($request = 1; $request <= (int) $requestsToServe && !file_exists($fileThatE
     file_put_contents($fileOfItsRecord, "read {$pageSize}\n", FILE_APPEND);
     usleep(random_int(SHORTEST_WORK_OF_THE_APPLICATION_MICROSECONDS, LONGEST_WORK_OF_THE_APPLICATION_MICROSECONDS));
 
-    $timesToldBeforeTheDisposal = $logger->timesToldTheTelemetryLockWasNotTaken();
-    $disposalStartedAt = hrtime(true);
     $client->dispose();
-    if ($logger->timesToldTheTelemetryLockWasNotTaken() > $timesToldBeforeTheDisposal) {
-        $millisecondsTheDisposalTook = intdiv(hrtime(true) - $disposalStartedAt, 1_000_000);
-        file_put_contents($fileOfItsRecord, "telemetry-not-kept {$millisecondsTheDisposalTook}\n", FILE_APPEND);
-    }
 }

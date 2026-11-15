@@ -13,6 +13,7 @@ if (!isset($argv)) {
     throw new RuntimeException('This script takes its arguments from the command line.');
 }
 [, $autoloadFile, $storagePath, $serverUrl, $flushInterval, $fileAwaitedBeforeEnding] = $argv;
+$bytesOfTheBiographyOfTheContext = (int) ($argv[6] ?? 0);
 
 require $autoloadFile;
 
@@ -36,7 +37,11 @@ $client = ConfigDirector::createClient(
     telemetry: new TelemetryOptions(flushInterval: (int) $flushInterval),
 );
 $client->initialize();
-$pageSize = $client->getValue('page-size', 10, new Context(id: 'user-42'));
+$pageSize = $client->getValue(
+    'page-size',
+    10,
+    new Context(id: 'user-42', traits: array_filter(['biography' => str_repeat('a', $bytesOfTheBiographyOfTheContext)])),
+);
 echo "page-size: {$pageSize}\n";
 
 while ($fileAwaitedBeforeEnding !== '' && !file_exists($fileAwaitedBeforeEnding)) {

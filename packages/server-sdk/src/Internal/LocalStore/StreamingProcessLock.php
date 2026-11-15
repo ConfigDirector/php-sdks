@@ -9,19 +9,19 @@ final readonly class StreamingProcessLock
     private const int MILLISECONDS_A_REQUEST_MAY_BE_LOOKING_AT_THE_LOCK = 250;
 
     private function __construct(
-        private ExclusiveFileLock $fileLock,
+        private FileLock $fileLock,
         private string $lockFilePath,
     ) {}
 
     public static function acquiredIn(string $storeFolder): self|UnacquiredFileLock
     {
         $lockFilePath = self::lockFilePathIn($storeFolder);
-        $fileLock = ExclusiveFileLock::acquiredWithin(
+        $fileLock = FileLock::exclusiveAcquiredWithin(
             self::MILLISECONDS_A_REQUEST_MAY_BE_LOOKING_AT_THE_LOCK,
             $lockFilePath,
         );
 
-        return $fileLock instanceof ExclusiveFileLock ? new self($fileLock, $lockFilePath) : $fileLock;
+        return $fileLock instanceof FileLock ? new self($fileLock, $lockFilePath) : $fileLock;
     }
 
     public static function isHeldIn(string $storeFolder): bool

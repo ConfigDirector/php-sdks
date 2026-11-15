@@ -1240,7 +1240,7 @@ final class ClientTelemetryTest extends TestCase
         );
         file_put_contents(
             $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry-tally.json',
-            '{"collectingSince":1794484800000,"droppedEvaluations":0,"droppedCapturedContexts":0}',
+            '{"collectingSince":1794484800000}',
         );
 
         $this->endARequestAfterTheFlushInterval();
@@ -1368,7 +1368,7 @@ final class ClientTelemetryTest extends TestCase
         );
     }
 
-    public function testTelemetryWhoseTallyCannotBeWrittenIsNotKeptAndLogsOneWarningNamingTheFile(): void
+    public function testTelemetryWhoseTallyCannotBeWrittenLogsOneWarningNamingTheFileAndIsReportedOnceTheTallyCanBeWritten(): void
     {
         $this->startSdkServerServing([]);
         $client = $this->initializedClient();
@@ -1377,9 +1377,95 @@ final class ClientTelemetryTest extends TestCase
         mkdir($tallyFile);
 
         $client->dispose();
+        $warningsLoggedWhileTheTallyCouldNotBeWritten = $this->logger->contextsLoggedAt(LogLevel::WARNING);
+        $this->endARequestAfterTheFlushInterval();
+        $requestsReceivedWhileTheTallyCouldNotBeWritten = $this->telemetryRequestsReceived();
+        rmdir($tallyFile);
+        $laterClient = $this->initializedClient();
+        $laterClient->getValue('unknown-banner', 'Welcome');
+        $laterClient->dispose();
+        $this->endARequestAfterTheFlushInterval();
 
-        self::assertSame([['file' => $tallyFile]], $this->logger->contextsLoggedAt(LogLevel::WARNING));
-        self::assertNotContains('telemetry.jsonl', TemporaryFolder::entriesOf($this->localStoreFolder()));
+        self::assertSame([['file' => $tallyFile]], $warningsLoggedWhileTheTallyCouldNotBeWritten);
+        self::assertSame([], $requestsReceivedWhileTheTallyCouldNotBeWritten);
+        self::assertSame(
+            ['unknown-flag', 'unknown-banner'],
+            array_column(array_column($this->evaluationsOfTheOnlyReport(), 'event'), 'key'),
+        );
+    }
+
+    public function testTelemetryThatAKilledProcessHadTakenForAReportIsRemovedByTheNextReportAndNotSent(): void
+    {
+        $this->startSdkServerServing([]);
+        $client = $this->initializedClient();
+        $client->getValue('unknown-flag', false);
+        $client->dispose();
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl.taken-0123456789abcdef',
+            '{"collectingSince":1794484800000,"evaluationCounts":{"{\\"key\\":\\"taken-by-a-killed-process\\"}":4}}'
+            . "\n",
+        );
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry-dropped.jsonl.taken-0123456789abcdef',
+            '{"droppedEvaluations":5,"droppedCapturedContexts":5}' . "\n",
+        );
+
+        $this->endARequestAfterTheFlushInterval();
+
+        self::assertSame(
+            ['unknown-flag'],
+            array_column(array_column($this->evaluationsOfTheOnlyReport(), 'event'), 'key'),
+        );
+        self::assertSame(
+            ['evaluatedConfig' => 0, 'capturedContexts' => 0],
+            $this->bodyOfTheOnlyReport()['droppedEvents'],
+        );
+        self::assertSame(
+            [],
+            array_values(array_filter(
+                TemporaryFolder::entriesOf($this->localStoreFolder()),
+                static fn(string $fileName): bool => str_contains($fileName, '.taken-'),
+            )),
+        );
+    }
+
+    #[RequiresOperatingSystem('Linux|Darwin')]
+    public function testTheFileOfDroppedCountsIsReadableByItsOwnerOnly(): void
+    {
+        umask(0);
+        $this->startSdkServerServing([]);
+        $client = $this->initializedClient();
+        $client->getValue('unknown-flag', false);
+        mkdir($this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl');
+
+        $client->dispose();
+
+        self::assertSame(
+            0o600,
+            fileperms($this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry-dropped.jsonl') & 0o777,
+        );
+    }
+
+    public function testDroppedCountsBeyondOneMebibyteOfThemAreLeftOutOfTheReport(): void
+    {
+        $this->startSdkServerServing([]);
+        $client = $this->initializedClient();
+        $client->getValue('unknown-flag', false);
+        $telemetryFile = $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl';
+        mkdir($telemetryFile);
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry-dropped.jsonl',
+            str_repeat('{"droppedEvaluations":1,"droppedCapturedContexts":0}' . "\n", 19_784),
+        );
+        $client->dispose();
+        rmdir($telemetryFile);
+
+        $this->endARequestAfterTheFlushInterval();
+
+        self::assertSame(
+            ['evaluatedConfig' => 19_784, 'capturedContexts' => 0],
+            $this->bodyOfTheOnlyReport()['droppedEvents'],
+        );
     }
 
     public function testARefusalThatCannotBeRecordedLogsAWarningNamingTheFile(): void

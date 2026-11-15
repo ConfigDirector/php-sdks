@@ -10,7 +10,7 @@ use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
 use ConfigDirector\Internal\Client\EventHandlers;
 use ConfigDirector\Internal\Connection\ServerSdkPayload;
 use ConfigDirector\Internal\Identity\SdkIdentity;
-use ConfigDirector\Internal\LocalStore\ExclusiveFileLock;
+use ConfigDirector\Internal\LocalStore\FileLock;
 use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
 use ConfigDirector\Internal\Telemetry\EventReporter;
 use ConfigDirector\Internal\Telemetry\LocalStoreTelemetry;
@@ -401,11 +401,11 @@ final class ClientTelemetryOverTimeTest extends TestCase
         $server = $this->serverAnswering([['status' => 200]]);
         $client = $this->clientThatOpenedTheLocalStore($server);
         $client->getValue('page-size', 10);
-        $lockOfAnotherProcess = ExclusiveFileLock::acquiredWithin(
+        $lockOfAnotherProcess = FileLock::exclusiveAcquiredWithin(
             0,
             $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.lock',
         );
-        self::assertInstanceOf(ExclusiveFileLock::class, $lockOfAnotherProcess);
+        self::assertInstanceOf(FileLock::class, $lockOfAnotherProcess);
 
         $disposalStartedAt = hrtime(true);
         $client->dispose();
@@ -421,6 +421,88 @@ final class ClientTelemetryOverTimeTest extends TestCase
             $this->logger->contextsLoggedAt(LogLevel::WARNING),
         );
         self::assertLessThan(1_000, $millisecondsTheDisposalTook);
+    }
+
+    public function testARequestThatEndsWhileAnotherAddsItsTelemetryKeepsItsOwnWithoutWaitingAndLogsNothing(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $this->aRequestReads('page-size', $server);
+        $client = $this->clientThatOpenedTheLocalStore($server);
+        $client->getValue('banner', 'in-code default value');
+        $lockOfARequestAddingItsTelemetry = $this->telemetryLockHeldShared();
+
+        $disposalStartedAt = hrtime(true);
+        $client->dispose();
+        $millisecondsTheDisposalTook = intdiv(hrtime(true) - $disposalStartedAt, 1_000_000);
+        $lockOfARequestAddingItsTelemetry->release();
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS;
+        $this->aRequestEnds($server);
+
+        self::assertSame([['page-size', 'banner']], self::keysReportedTo($server));
+        self::assertSame([], $this->logger->contextsLoggedAt(LogLevel::WARNING));
+        self::assertLessThan(250, $millisecondsTheDisposalTook);
+    }
+
+    public function testARequestThatFindsAReportDueWhileAnotherAddsItsTelemetryLeavesTheReportToTheNextRequest(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $this->aRequestReads('page-size', $server);
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS;
+        $lockOfARequestAddingItsTelemetry = $this->telemetryLockHeldShared();
+
+        $requestStartedAt = hrtime(true);
+        $this->aRequestReads('banner', $server);
+        $millisecondsTheRequestTook = intdiv(hrtime(true) - $requestStartedAt, 1_000_000);
+        $reportsSentWhileTheOtherRequestWasAdding = count($server->requestsReceived());
+        $lockOfARequestAddingItsTelemetry->release();
+        $this->aRequestEnds($server);
+
+        self::assertSame(0, $reportsSentWhileTheOtherRequestWasAdding);
+        self::assertSame([['page-size', 'banner']], self::keysReportedTo($server));
+        self::assertSame([], $this->logger->contextsLoggedAt(LogLevel::WARNING));
+        self::assertLessThan(250, $millisecondsTheRequestTook);
+    }
+
+    public function testTelemetryAddedWhileAnotherRequestKeptTheTallyFromBeingStartedIsReportedOnceALaterRequestStartedIt(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $client = $this->clientThatOpenedTheLocalStore($server);
+        $client->getValue('page-size', 10);
+        $lockOfARequestAddingItsTelemetry = $this->telemetryLockHeldShared();
+        $client->dispose();
+        $lockOfARequestAddingItsTelemetry->release();
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS;
+        $this->aRequestReads('banner', $server);
+        $reportsSentBeforeAFlushIntervalPassedSinceTheTallyWasStarted = count($server->requestsReceived());
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS;
+
+        $this->aRequestEnds($server);
+
+        self::assertSame(0, $reportsSentBeforeAFlushIntervalPassedSinceTheTallyWasStarted);
+        self::assertSame([['page-size', 'banner']], self::keysReportedTo($server));
+        self::assertSame([], $this->logger->contextsLoggedAt(LogLevel::WARNING));
+    }
+
+    public function testDisposingAClientOlderThanTheFlushIntervalWaitsAQuarterOfASecondForRequestsThatAreAddingTheirTelemetry(): void
+    {
+        $server = $this->serverAnswering([['status' => 200]]);
+        $clientOfALongRunningProcess = $this->clientThatOpenedTheLocalStore($server);
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS + 1;
+        $this->aRequestReads('page-size', $server);
+        $lockOfARequestAddingItsTelemetry = $this->telemetryLockHeldShared();
+
+        $disposalStartedAt = hrtime(true);
+        $clientOfALongRunningProcess->dispose();
+        $millisecondsTheDisposalTook = intdiv(hrtime(true) - $disposalStartedAt, 1_000_000);
+        $reportsSentWhileTheOtherRequestWasAdding = count($server->requestsReceived());
+        $lockOfARequestAddingItsTelemetry->release();
+        $this->clock->epochMilliseconds += self::FLUSH_INTERVAL_MILLISECONDS;
+        $this->aRequestEnds($server);
+
+        self::assertGreaterThanOrEqual(250, $millisecondsTheDisposalTook);
+        self::assertSame(0, $reportsSentWhileTheOtherRequestWasAdding);
+        self::assertSame([['page-size']], self::keysReportedTo($server));
+        self::assertSame([], $this->logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testATrackedEventIsReportedWithTheTimeItWasTracked(): void
@@ -531,6 +613,17 @@ final class ClientTelemetryOverTimeTest extends TestCase
                 logger: $this->logger,
             ),
         );
+    }
+
+    private function telemetryLockHeldShared(): FileLock
+    {
+        $sharedLock = FileLock::sharedAcquiredWithin(
+            0,
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.lock',
+        );
+        self::assertInstanceOf(FileLock::class, $sharedLock);
+
+        return $sharedLock;
     }
 
     private function localStoreFolder(): string

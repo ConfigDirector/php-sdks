@@ -6,12 +6,29 @@ namespace ConfigDirector\Internal\LocalStore;
 
 final readonly class StoredTelemetry
 {
-    /**
-     * @param list<string> $telemetryFileLines
-     */
     public function __construct(
-        public array $telemetryFileLines,
-        public int $droppedEvaluations,
-        public int $droppedCapturedContexts,
+        private ?LinesMovedAside $telemetryFileLines,
+        private ?LinesMovedAside $droppedCountsFileLines,
     ) {}
+
+    /**
+     * @return iterable<int, non-empty-string>
+     */
+    public function telemetryFileLinesReadOnce(): iterable
+    {
+        return $this->telemetryFileLines?->linesReadOnce() ?? [];
+    }
+
+    public function droppedCountsReadOnce(): DroppedTelemetryCounts
+    {
+        $droppedCounts = new DroppedTelemetryCounts(evaluations: 0, capturedContexts: 0);
+        foreach ($this->droppedCountsFileLines?->linesReadOnce() ?? [] as $droppedCountsFileLine) {
+            $droppedCounts = $droppedCounts->plus(
+                DroppedTelemetryCounts::fromJson($droppedCountsFileLine)
+                    ?? new DroppedTelemetryCounts(evaluations: 0, capturedContexts: 0),
+            );
+        }
+
+        return $droppedCounts;
+    }
 }

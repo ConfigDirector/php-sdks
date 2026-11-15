@@ -14,7 +14,7 @@ final readonly class StoreFile
 
     private string $temporaryPath;
 
-    public function __construct(string $storeFolder, string $fileName)
+    public function __construct(private string $storeFolder, string $fileName)
     {
         $this->path = $storeFolder . DIRECTORY_SEPARATOR . $fileName;
         $this->temporaryPath = $this->path . '.tmp';
@@ -25,6 +25,13 @@ final readonly class StoreFile
         clearstatcache(true, $this->path);
 
         return file_exists($this->path);
+    }
+
+    public function isARegularFile(): bool
+    {
+        clearstatcache(true, $this->path);
+
+        return is_file($this->path);
     }
 
     public function sizeInBytes(): int
@@ -51,6 +58,14 @@ final readonly class StoreFile
     {
         return $this->writeTemporaryFile($contents)
             && self::attemptedAgainOnWindows(fn(): bool => rename($this->temporaryPath, $this->path));
+    }
+
+    public function movedTo(string $fileName): ?self
+    {
+        $movedFile = new self($this->storeFolder, $fileName);
+        $isMoved = self::attemptedAgainOnWindows(fn(): bool => rename($this->path, $movedFile->path));
+
+        return $isMoved ? $movedFile : null;
     }
 
     public function remove(): void

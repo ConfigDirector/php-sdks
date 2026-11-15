@@ -7,6 +7,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Requests that end at the same time add their telemetry to the local store without waiting for each
+  other. Until now they added it one at a time, so on a slow or busy host some requests waited up to
+  250 milliseconds at their end, ended without their telemetry and logged the warning
+  `[LocalStore] {file} could not be written or locked, so the telemetry of this request was not kept.`
+  What is reported and when it is sent stay as they were. On Windows, where PHP cannot append to
+  one file from several processes safely, a request still waits for the one write of another.
+- The telemetry kept in the local store can pass its 8 MiB limit by the telemetry of the requests
+  that add theirs at the same moment. A report counts as dropped at most what about 19,000 requests
+  could not add since the last report; it had no such limit.
+- The request that sends a telemetry report reads the stored telemetry one line at a time. With the
+  local store's telemetry at its 8 MiB limit and the default `eventQueueLimit`, that request peaks
+  at about 8 MiB of memory, where it took about 19 MiB.
+- Telemetry that cannot be scheduled for a report, because the local store's file that records when
+  telemetry was last sent cannot be written, now stays in the local store and is reported once that
+  file can be written. It was discarded before. The warning that names the file is logged as before.
+- While processes of 0.1.0 and of this version share a local store, during a deploy, every read is
+  still reported once. Only a count of dropped telemetry that one version recorded is not reported
+  by the other.
+
 ## [0.1.0] - 2026-11-14
 
 ### Added

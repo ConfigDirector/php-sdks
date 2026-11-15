@@ -112,14 +112,21 @@ the polls and adds up the evaluations of every telemetry report; the other kills
 milliseconds meanwhile. The test is about what the processes do to each other, not about how many
 requests a machine serves, so it is kept light enough for a CI runner with a few slow cores: every
 process loads the SDK's classes and waits for the others before it serves, a request lasts 300 to 500
-milliseconds, and about 125 requests end each second. A process that waits for the CPU while it holds
-a lock makes the others wait past the 250 milliseconds they give the telemetry lock, and they end
-without their telemetry and log that. The first version, at 2,400 requests a second, lost telemetry
-that way on one CPU and on the macOS and Windows runners; this one loses none on a quarter of a CPU
-(`docker run --cpus=0.25`). The tests count each request that logged it and expect every other read
-in a report exactly once, so telemetry lost without that line, or reported twice, fails them on any
-machine. When requests did lose their telemetry, the test writes how many, and how long their
-`dispose()` took, to standard error. `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
+milliseconds, and about 125 requests end each second. Requests hold the telemetry lock shared while
+they add their telemetry, so they do not wait for each other. Only a process that holds the lock
+exclusive, to take the telemetry for a report, and waits for the CPU for more than 250 milliseconds
+meanwhile would make the others end without their telemetry and log that. The first test expects no
+such line and every read in a report exactly once, so telemetry that is lost or reported twice fails
+it on any machine, and it passes on a quarter of a CPU (`docker run --cpus=0.25`). The second expects
+no such line either, and no read reported more often than it was made, because a process killed
+while it adds or sends telemetry loses its own. `AppendedLinesFileProcessesTest` has 50 processes
+append a line of one mebibyte each to one file at the same moment and reads every line back whole,
+which is what lets requests add their telemetry at the same time. That holds on a local file system,
+so the local store does not belong on a network one. On Windows PHP moves to the end of a file and
+writes to it in two steps, so there a process locks the telemetry file for its one write
+(`AppendedLinesFile::append`), and only the Windows jobs of CI run that path. The test in
+`ClientTelemetryAcrossRequestsTest` of a request killed while it adds its telemetry has the shell
+limit the size of a file, needs `sh`, and is skipped on Windows. `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
 and late in 100,000 reads, 1,000 refreshes of the local store, 100,000 watches and 1,000 clients, the
 last with the cycle collector off, so that a client is freed when it is disposed of and not later.
 `SourceOfTheSdkTest` reads the source for calls to functions of PHP extensions that `composer.json`

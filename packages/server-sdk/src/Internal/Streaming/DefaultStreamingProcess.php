@@ -6,10 +6,10 @@ namespace ConfigDirector\Internal\Streaming;
 
 use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigDirectorException;
+use ConfigDirector\Internal\LocalStore\ExclusiveTelemetryLock;
 use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
 use ConfigDirector\Internal\LocalStore\StoredTelemetry;
 use ConfigDirector\Internal\LocalStore\StreamingProcessLock;
-use ConfigDirector\Internal\LocalStore\TelemetryLock;
 use ConfigDirector\Internal\LocalStore\UnacquiredFileLock;
 use ConfigDirector\Internal\Telemetry\EventReporter;
 use ConfigDirector\Internal\Time\Clock;
@@ -135,14 +135,17 @@ final class DefaultStreamingProcess implements StreamingProcess
     private function sendTheStoredTelemetry(): void
     {
         $store = $this->localStore->store();
-        $storedTelemetry = $store->whileHoldingTheTelemetryLock($this->storedTelemetryTakenUnlessSendingIsPaused(...));
+        $storedTelemetry = $store->whileHoldingTheTelemetryLockExclusive(
+            $this->storedTelemetryTakenUnlessSendingIsPaused(...),
+        );
         if ($storedTelemetry !== null) {
             $this->eventReporter->send($storedTelemetry, $store);
         }
     }
 
-    private function storedTelemetryTakenUnlessSendingIsPaused(TelemetryLock $telemetryLock): ?StoredTelemetry
-    {
+    private function storedTelemetryTakenUnlessSendingIsPaused(
+        ExclusiveTelemetryLock $telemetryLock,
+    ): ?StoredTelemetry {
         if ($this->eventReporter->sendingIsPausedUnder($telemetryLock)) {
             return null;
         }

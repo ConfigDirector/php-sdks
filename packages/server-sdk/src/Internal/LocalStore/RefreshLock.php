@@ -12,7 +12,7 @@ final readonly class RefreshLock
         . 'store keeps the values it had.';
 
     private function __construct(
-        private ExclusiveFileLock $fileLock,
+        private FileLock $fileLock,
         private string $storeFolder,
         private PayloadFile $payloadFile,
         private LoggerInterface $logger,
@@ -24,12 +24,12 @@ final readonly class RefreshLock
         LoggerInterface $logger,
     ): self|UnacquiredFileLock {
         $lockFilePath = $storeFolder . DIRECTORY_SEPARATOR . 'lock';
-        $fileLock = ExclusiveFileLock::acquiredWithin($timeoutMilliseconds, $lockFilePath);
+        $fileLock = FileLock::exclusiveAcquiredWithin($timeoutMilliseconds, $lockFilePath);
         if ($fileLock === UnacquiredFileLock::LockFileUnusable) {
             $logger->error(self::UNWRITABLE_FILE_MESSAGE, ['file' => $lockFilePath]);
         }
 
-        return $fileLock instanceof ExclusiveFileLock
+        return $fileLock instanceof FileLock
             ? new self($fileLock, $storeFolder, new PayloadFile($storeFolder), $logger)
             : $fileLock;
     }

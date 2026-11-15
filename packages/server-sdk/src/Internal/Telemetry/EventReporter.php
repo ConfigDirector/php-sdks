@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\Telemetry;
 
+use ConfigDirector\Internal\LocalStore\ExclusiveTelemetryLock;
 use ConfigDirector\Internal\LocalStore\LocalStore;
+use ConfigDirector\Internal\LocalStore\SharedTelemetryLock;
 use ConfigDirector\Internal\LocalStore\StoredTelemetry;
-use ConfigDirector\Internal\LocalStore\TelemetryLock;
 use ConfigDirector\Internal\LocalStore\TelemetrySendingPause;
 use ConfigDirector\Internal\Time\Clock;
 use Psr\Log\LoggerInterface;
@@ -22,7 +23,7 @@ final readonly class EventReporter
         private LoggerInterface $logger,
     ) {}
 
-    public function sendingIsPausedUnder(TelemetryLock $telemetryLock): bool
+    public function sendingIsPausedUnder(SharedTelemetryLock|ExclusiveTelemetryLock $telemetryLock): bool
     {
         $now = $this->clock->epochMilliseconds();
         $sendingPause = $telemetryLock->sendingPause($this->endpoint->url);
@@ -34,10 +35,11 @@ final readonly class EventReporter
     {
         $now = $this->clock->epochMilliseconds();
         $report = new CollectedTelemetry($this->eventQueueLimit, collectingSinceEpochMilliseconds: $now);
-        foreach ($storedTelemetry->telemetryFileLines as $telemetryFileLine) {
+        foreach ($storedTelemetry->telemetryFileLinesReadOnce() as $telemetryFileLine) {
             $report->addTelemetryOfTheFileLine($telemetryFileLine);
         }
-        $report->countAsDropped($storedTelemetry->droppedEvaluations, $storedTelemetry->droppedCapturedContexts);
+        $droppedCounts = $storedTelemetry->droppedCountsReadOnce();
+        $report->countAsDropped($droppedCounts->evaluations, $droppedCounts->capturedContexts);
         if ($report->isEmpty()) {
             return;
         }
@@ -87,7 +89,9 @@ final readonly class EventReporter
             ['status' => $refusal->status],
         );
 
-        $store->whileHoldingTheTelemetryLock(function (TelemetryLock $telemetryLock) use ($refusal): void {
+        $store->whileHoldingTheTelemetryLockExclusive(function (ExclusiveTelemetryLock $telemetryLock) use (
+            $refusal,
+        ): void {
             $now = $this->clock->epochMilliseconds();
             $telemetryLock->recordSendingPause(
                 $this->endpoint->url,
@@ -103,12 +107,13 @@ final readonly class EventReporter
 
     private function countAsDropped(CollectedTelemetry $unsentReport, LocalStore $store): void
     {
-        $store->whileHoldingTheTelemetryLock(function (TelemetryLock $telemetryLock) use ($unsentReport): void {
-            $telemetryLock->countAsDropped(
-                $unsentReport->evaluationsCollected(),
-                $unsentReport->capturedContextsCollected(),
-                $this->clock->epochMilliseconds(),
-            );
-        });
+        $store->whileHoldingTheTelemetryLockShared(
+            static function (SharedTelemetryLock $telemetryLock) use ($unsentReport): void {
+                $telemetryLock->countAsDropped(
+                    $unsentReport->evaluationsCollected(),
+                    $unsentReport->capturedContextsCollected(),
+                );
+            },
+        );
     }
 }

@@ -54,10 +54,7 @@ final class ClientHostileInputTest extends TestCase
 
     public function testATelemetryFileHoldingTheLargestIntegerAsACountIsReportedWithoutThatCount(): void
     {
-        $this->writeTheFileOfTheLocalStore(
-            'telemetry-tally.json',
-            '{"collectingSince":1,"droppedEvaluations":0,"droppedCapturedContexts":0}',
-        );
+        $this->writeTheFileOfTheLocalStore('telemetry-tally.json', '{"collectingSince":1}');
         $this->writeTheFileOfTheLocalStore(
             'telemetry.jsonl',
             '{"collectingSince":1,"evaluationCounts":{"{\"key\":\"written-by-hand\"}":9223372036854775807}}' . "\n",
@@ -71,25 +68,40 @@ final class ClientHostileInputTest extends TestCase
         self::assertSame([['page-size', 1]], $this->keysAndCountsOfTheEvaluationsReported());
     }
 
-    public function testATelemetryTallyHoldingTheLargestIntegerAsDroppedEvaluationsIsStartedAgainWithNoneDropped(): void
+    public function testATelemetryFileIsReadUpToSixteenMebibytesAndWhatFollowsIsLeftOutOfTheReport(): void
     {
+        $this->writeTheFileOfTheLocalStore('telemetry-tally.json', '{"collectingSince":1}');
         $this->writeTheFileOfTheLocalStore(
-            'telemetry-tally.json',
-            '{"collectingSince":1,"droppedEvaluations":9223372036854775807,"droppedCapturedContexts":0}',
+            'telemetry.jsonl',
+            '{"collectingSince":1,"evaluationCounts":{"{\"key\":\"written-at-the-start\"}":2}}' . "\n"
+            . str_repeat('x', 16 * 1024 * 1024) . "\n"
+            . '{"collectingSince":1,"evaluationCounts":{"{\"key\":\"written-past-sixteen-mebibytes\"}":3}}' . "\n",
+        );
+        $client = $this->client();
+
+        $client->initialize();
+        $client->dispose();
+
+        self::assertSame([['written-at-the-start', 2]], $this->keysAndCountsOfTheEvaluationsReported());
+    }
+
+    public function testADroppedCountOfTheLargestIntegerIsLeftOutOfTheReportThatCountsTheOthers(): void
+    {
+        $this->writeTheFileOfTheLocalStore('telemetry-tally.json', '{"collectingSince":1}');
+        $this->writeTheFileOfTheLocalStore(
+            'telemetry-dropped.jsonl',
+            '{"droppedEvaluations":9223372036854775807,"droppedCapturedContexts":0}' . "\n"
+            . '{"droppedEvaluations":2,"droppedCapturedContexts":1}' . "\n",
         );
         $client = $this->client();
 
         $client->initialize();
         $client->getValue('page-size', 10, new Context(id: 'user-42'));
         $client->dispose();
-        $clientOfARequestThatEndsAfterItsFlushInterval = $this->client(flushIntervalMilliseconds: 1);
-        $clientOfARequestThatEndsAfterItsFlushInterval->initialize();
-        usleep(5_000);
-        $clientOfARequestThatEndsAfterItsFlushInterval->dispose();
 
         self::assertSame([['page-size', 1]], $this->keysAndCountsOfTheEvaluationsReported());
         self::assertSame(
-            ['evaluatedConfig' => 0, 'capturedContexts' => 0],
+            ['evaluatedConfig' => 2, 'capturedContexts' => 1],
             $this->bodyOfTheOnlyReport()['droppedEvents'] ?? null,
         );
     }

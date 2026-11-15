@@ -90,16 +90,72 @@ final class LocalStore
     /**
      * @template TOutcome
      *
-     * @param \Closure(TelemetryLock): TOutcome $work
+     * @param \Closure(SharedTelemetryLock): TOutcome $work
      *
      * @return TOutcome|null
      */
-    public function whileHoldingTheTelemetryLock(\Closure $work): mixed
+    public function whileHoldingTheTelemetryLockShared(\Closure $work): mixed
     {
         $telemetryLock = $this->usableFolder === null
             ? null
-            : TelemetryLock::acquiredWithin(
+            : SharedTelemetryLock::acquiredWithin(
                 self::MILLISECONDS_TO_WAIT_FOR_THE_TELEMETRY_LOCK,
+                $this->usableFolder,
+                $this->warnOnceThatTelemetryWasNotKeptIn(...),
+            );
+        if ($telemetryLock === null) {
+            return null;
+        }
+
+        try {
+            return $work($telemetryLock);
+        } finally {
+            $telemetryLock->release();
+        }
+    }
+
+    /**
+     * @template TOutcome
+     *
+     * @param \Closure(ExclusiveTelemetryLock): TOutcome $work
+     *
+     * @return TOutcome|null
+     */
+    public function whileHoldingTheTelemetryLockExclusive(\Closure $work): mixed
+    {
+        return $this->whileHoldingTheTelemetryLockExclusiveAcquiredWithin(
+            self::MILLISECONDS_TO_WAIT_FOR_THE_TELEMETRY_LOCK,
+            $work,
+        );
+    }
+
+    /**
+     * @template TOutcome
+     *
+     * @param \Closure(ExclusiveTelemetryLock): TOutcome $work
+     *
+     * @return TOutcome|null
+     */
+    public function whileHoldingTheTelemetryLockExclusiveIfItIsFree(\Closure $work): mixed
+    {
+        return $this->whileHoldingTheTelemetryLockExclusiveAcquiredWithin(timeoutMilliseconds: 0, work: $work);
+    }
+
+    /**
+     * @template TOutcome
+     *
+     * @param \Closure(ExclusiveTelemetryLock): TOutcome $work
+     *
+     * @return TOutcome|null
+     */
+    private function whileHoldingTheTelemetryLockExclusiveAcquiredWithin(
+        int $timeoutMilliseconds,
+        \Closure $work,
+    ): mixed {
+        $telemetryLock = $this->usableFolder === null
+            ? null
+            : ExclusiveTelemetryLock::acquiredWithin(
+                $timeoutMilliseconds,
                 $this->usableFolder,
                 $this->warnOnceThatTelemetryWasNotKeptIn(...),
             );

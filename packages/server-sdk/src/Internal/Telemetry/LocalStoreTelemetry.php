@@ -6,10 +6,11 @@ namespace ConfigDirector\Internal\Telemetry;
 
 use ConfigDirector\ConfigEvaluation;
 use ConfigDirector\ConfigState;
+use ConfigDirector\Internal\LocalStore\ExclusiveTelemetryLock;
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
+use ConfigDirector\Internal\LocalStore\SharedTelemetryLock;
 use ConfigDirector\Internal\LocalStore\StoredTelemetry;
-use ConfigDirector\Internal\LocalStore\TelemetryLock;
 use ConfigDirector\Internal\Time\ClientLifetime;
 use ConfigDirector\Internal\Time\Clock;
 use ConfigDirector\Internal\Value\InCodeDefaultValue;
@@ -130,22 +131,67 @@ final class LocalStoreTelemetry implements ClientTelemetry
         }
 
         $store = $this->localStore->store();
-        $telemetryToSend = $store->whileHoldingTheTelemetryLock(
-            fn(TelemetryLock $telemetryLock): ?StoredTelemetry => $this->telemetryToSendAfterAdding(
+        $workLeftAfterAdding = $store->whileHoldingTheTelemetryLockShared(
+            fn(SharedTelemetryLock $telemetryLock): WorkUnderTheExclusiveTelemetryLock
+                => $this->workLeftAfterAdding($telemetryToMove, $telemetryLock, $sendsWhatTheStoreHoldsAtOnce, $store),
+        );
+        $telemetryToSend = match ($workLeftAfterAdding) {
+            null, WorkUnderTheExclusiveTelemetryLock::Nothing => null,
+            WorkUnderTheExclusiveTelemetryLock::StartingTheTally,
+            WorkUnderTheExclusiveTelemetryLock::TakingTheStoredTelemetry => $this->telemetryTakenUnderTheExclusiveLock(
                 $telemetryToMove,
-                $telemetryLock,
                 $sendsWhatTheStoreHoldsAtOnce,
                 $store,
             ),
-        );
+        };
         if ($telemetryToSend !== null) {
             $this->eventReporter->send($telemetryToSend, $store);
         }
     }
 
-    private function telemetryToSendAfterAdding(
+    private function telemetryTakenUnderTheExclusiveLock(
+        CollectedTelemetry $telemetryMoved,
+        bool $sendsWhatTheStoreHoldsAtOnce,
+        LocalStore $store,
+    ): ?StoredTelemetry {
+        $workDecidedAgainUnder = fn(ExclusiveTelemetryLock $telemetryLock): ?StoredTelemetry
+            => $this->workDecidedAgainUnder($telemetryLock, $telemetryMoved, $sendsWhatTheStoreHoldsAtOnce, $store);
+
+        return $sendsWhatTheStoreHoldsAtOnce
+            ? $store->whileHoldingTheTelemetryLockExclusive($workDecidedAgainUnder)
+            : $store->whileHoldingTheTelemetryLockExclusiveIfItIsFree($workDecidedAgainUnder);
+    }
+
+    private function workLeftAfterAdding(
         CollectedTelemetry $telemetryToMove,
-        TelemetryLock $telemetryLock,
+        SharedTelemetryLock $telemetryLock,
+        bool $sendsWhatTheStoreHoldsAtOnce,
+        LocalStore $store,
+    ): WorkUnderTheExclusiveTelemetryLock {
+        if ($this->eventReporter->sendingIsPausedUnder($telemetryLock)) {
+            return WorkUnderTheExclusiveTelemetryLock::Nothing;
+        }
+
+        $isKept = $telemetryToMove->isEmpty()
+            || $telemetryLock->addTelemetryOfAClient($telemetryToMove->telemetryFileLine());
+        if (!$isKept) {
+            $telemetryLock->countAsDropped(
+                $telemetryToMove->evaluationsCollected(),
+                $telemetryToMove->capturedContextsCollected(),
+            );
+        }
+
+        return $this->workUnderTheExclusiveTelemetryLock(
+            $telemetryLock->collectingSinceEpochMilliseconds(),
+            $telemetryToMove,
+            $sendsWhatTheStoreHoldsAtOnce,
+            $store,
+        );
+    }
+
+    private function workDecidedAgainUnder(
+        ExclusiveTelemetryLock $telemetryLock,
+        CollectedTelemetry $telemetryMoved,
         bool $sendsWhatTheStoreHoldsAtOnce,
         LocalStore $store,
     ): ?StoredTelemetry {
@@ -153,29 +199,50 @@ final class LocalStoreTelemetry implements ClientTelemetry
             return null;
         }
 
-        $now = $this->clock->epochMilliseconds();
-
-        $isKept = $telemetryToMove->isEmpty() || $telemetryLock->addTelemetryOfAClient(
-            $telemetryToMove->telemetryFileLine(),
-            $telemetryToMove->collectingSinceEpochMilliseconds(),
+        $workNowThatTheLockIsHeld = $this->workUnderTheExclusiveTelemetryLock(
+            $telemetryLock->collectingSinceEpochMilliseconds(),
+            $telemetryMoved,
+            $sendsWhatTheStoreHoldsAtOnce,
+            $store,
         );
-        if (!$isKept) {
-            $telemetryLock->countAsDropped(
-                $telemetryToMove->evaluationsCollected(),
-                $telemetryToMove->capturedContextsCollected(),
-                $now,
-            );
+
+        return match ($workNowThatTheLockIsHeld) {
+            WorkUnderTheExclusiveTelemetryLock::Nothing => null,
+            WorkUnderTheExclusiveTelemetryLock::StartingTheTally => $telemetryLock->startCollectingAt(
+                $telemetryMoved->collectingSinceEpochMilliseconds(),
+            ),
+            WorkUnderTheExclusiveTelemetryLock::TakingTheStoredTelemetry => $telemetryLock->takeStoredTelemetry(
+                $this->clock->epochMilliseconds(),
+            ),
+        };
+    }
+
+    private function workUnderTheExclusiveTelemetryLock(
+        ?int $talliedCollectingSince,
+        CollectedTelemetry $telemetryMoved,
+        bool $sendsWhatTheStoreHoldsAtOnce,
+        LocalStore $store,
+    ): WorkUnderTheExclusiveTelemetryLock {
+        $collectingSinceOfThisClient = $telemetryMoved->isEmpty()
+            ? null
+            : $telemetryMoved->collectingSinceEpochMilliseconds();
+        $storeCollectingSince = $talliedCollectingSince ?? $collectingSinceOfThisClient;
+        if ($storeCollectingSince === null) {
+            return WorkUnderTheExclusiveTelemetryLock::Nothing;
         }
 
-        $storeCollectingSince = $telemetryLock->collectingSinceEpochMilliseconds();
-        $isDue = $storeCollectingSince !== null && (
-            $sendsWhatTheStoreHoldsAtOnce
+        $now = $this->clock->epochMilliseconds();
+        $isDue = $sendsWhatTheStoreHoldsAtOnce
             || $now - $storeCollectingSince >= $this->flushIntervalMilliseconds
-            || $storeCollectingSince > $now
-        );
+            || $storeCollectingSince > $now;
+        if ($isDue) {
+            return $store->isHeldByAStreamingProcess()
+                ? WorkUnderTheExclusiveTelemetryLock::Nothing
+                : WorkUnderTheExclusiveTelemetryLock::TakingTheStoredTelemetry;
+        }
 
-        $isSentByThisProcess = $isDue && !$store->isHeldByAStreamingProcess();
-
-        return $isSentByThisProcess ? $telemetryLock->takeStoredTelemetry($now) : null;
+        return $talliedCollectingSince === null
+            ? WorkUnderTheExclusiveTelemetryLock::StartingTheTally
+            : WorkUnderTheExclusiveTelemetryLock::Nothing;
     }
 }

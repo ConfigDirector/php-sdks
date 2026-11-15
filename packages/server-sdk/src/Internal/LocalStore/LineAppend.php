@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Internal\LocalStore;
 
-enum TelemetryFileAppend
+enum LineAppend
 {
     case Appended;
     case OverTheSizeLimit;
