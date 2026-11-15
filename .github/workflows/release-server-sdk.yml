@@ -1,0 +1,24 @@
+name: Release server-sdk
+
+# Manual by design: releases whatever version packages/server-sdk/src/Version.php declares on main,
+# through the steps in release-package.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-package.yml
+    permissions:
+      contents: write
+    with:
+      package: server-sdk
+      read-only-repository: ConfigDirector/php-server-sdk
+    secrets:
+      READ_ONLY_REPOSITORIES_TOKEN: ${{ secrets.READ_ONLY_REPOSITORIES_TOKEN }}

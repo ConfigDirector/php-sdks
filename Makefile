@@ -1,5 +1,5 @@
-.PHONY: install hooks verify-php verify-lock format lint test test-lowest samples-local check-floor audit \
-	benchmark check check-all clean
+.PHONY: install hooks verify-php verify-lock format lint test test-lowest test-release samples-local check-floor \
+	audit benchmark check check-all clean
 
 # Every package this repository publishes, each in a directory under packages/ named after its Composer
 # package. Narrow a target to one of them with, for example, `make test PACKAGES=server-sdk`.
@@ -77,6 +77,13 @@ test-lowest:
 		status=$$?; rm -rf "$$lowest"; [ "$$status" -eq 0 ] || exit "$$status"; \
 	done
 
+# The release workflow's scripts decide the version, the tags and the notes of a release, refuse one
+# they must not make, and push a package to its read-only repository. This runs them against throwaway
+# repositories, one per scenario, and checks what the archive Composer downloads holds for each package.
+test-release:
+	@printf '\n\033[1m==> test-release\033[0m\n'
+	.github/scripts/release-test.sh
+
 # PHPStan and the suite of each sample, against the packages in this working tree, which is what catches a
 # change to a package that breaks the code an application writes against it.
 samples-local: install
@@ -116,7 +123,7 @@ benchmark:
 check: lint test
 
 # Everything CI runs. The pre-push hook calls this.
-check-all: verify-php verify-lock test test-lowest samples-local check-floor audit
+check-all: verify-php verify-lock test test-lowest test-release samples-local check-floor audit
 	@printf '\n\033[1m✓ all checks passed\033[0m\n'
 
 clean:

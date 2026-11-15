@@ -38,6 +38,7 @@ later release on the same line. On macOS, `brew install php composer` installs a
 make install       # composer install, every package and sample
 make hooks         # pre-push hook that runs make check-all
 make check         # lint and test: the fast loop
+make test-release  # the release scripts, against throwaway repositories
 make samples-local # PHPStan and the samples' suites, against the packages in this working tree
 make check-floor   # lint and the suites on PHP 8.3, in Docker
 make check-all     # everything CI runs
@@ -163,18 +164,201 @@ registering the new name in the ConfigDirector capability tables.
 
 ## Releasing
 
-Each package is released on its own. Its version lives in exactly one place, the `CURRENT` constant
-of its `Version` class:
+Each package is released on its own, and the steps are the same for both. Its version lives in
+exactly one place, the `CURRENT` constant of its `Version` class:
 
-| Package | Version | Changelog |
+| Package | Version | Changelog | Workflow | Read-only repository |
+|---|---|---|---|---|
+| configdirector/server-sdk | [`Version.php`](packages/server-sdk/src/Version.php) | [CHANGELOG.md](packages/server-sdk/CHANGELOG.md) | [Release server-sdk](.github/workflows/release-server-sdk.yml) | [ConfigDirector/php-server-sdk](https://github.com/ConfigDirector/php-server-sdk) |
+| configdirector/openfeature-server-provider | [`Version.php`](packages/openfeature-server-provider/src/Version.php) | [CHANGELOG.md](packages/openfeature-server-provider/CHANGELOG.md) | [Release openfeature-server-provider](.github/workflows/release-openfeature-server-provider.yml) | [ConfigDirector/php-openfeature-server-provider](https://github.com/ConfigDirector/php-openfeature-server-provider) |
+
+Packagist publishes one package per repository and serves a version from a tag named after it. So
+each package has a read-only repository of its own, which Packagist reads, and a release pushes
+there the commits that changed the package's directory, with that directory as the root, and tags
+the last of them `vX.Y.Z`. Nothing else is ever pushed to a read-only repository, and issues and
+pull requests belong in this one.
+
+1. In the package's changelog, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a
+   fresh, empty `## [Unreleased]` above it.
+2. Set `CURRENT` to match and merge both to `main`.
+3. Run the package's release workflow against `main`; it refuses any other branch. It is manual
+   (`workflow_dispatch`) by design and releases whatever version `main` declares. It reads
+   `CURRENT` and refuses to go on when `vX.Y.Z` already exists in the read-only repository, when
+   `<package>/vX.Y.Z` already exists in this one, when the changelog has no section for that
+   version (an empty section counts as none), or when the package's `composer.json` requires a
+   development version of another package, such as `dev-main`, or a version that Packagist does
+   not serve yet. Then it runs `make check-all`. A second job, on a checkout of its own, pushes the
+   package and its tag to the read-only repository, tags the released commit `<package>/vX.Y.Z`
+   in this repository, creates a GitHub Release here with the changelog section as its notes, and
+   waits until Packagist serves the version.
+
+A version is `X.Y.Z`, or `X.Y.Z-alpha.N`, `X.Y.Z-beta.N` or `X.Y.Z-rc.N` for a prerelease, which is
+marked as one on GitHub and which Composer installs only for an application that asks for that
+stability. The workflow refuses every other form, because Packagist skips a tag that Composer
+cannot read as a version.
+
+Composer and Packagist keep what they downloaded for a version, so a tag is never moved or
+deleted: to ship a fix, bump `CURRENT`, add a changelog section and release again. Both workflows
+call [release-package.yml](.github/workflows/release-package.yml) with their package's name, so a
+change to the release steps is made there once. The checks that run before anything is pushed
+live in [release-preflight.sh](.github/scripts/release-preflight.sh) and the push in
+[push-package-to-read-only-repository.sh](.github/scripts/push-package-to-read-only-repository.sh);
+`make test-release` runs both against throwaway repositories.
+
+The push to the read-only repository is the release. When a step before it fails, nothing is
+published: fix the cause and run the workflow again, or only its failed job when the checks had
+passed. When a later step fails, the version is out and the workflow refuses to release it again,
+so finish by hand what the failed run left. For the server SDK, with the commit the run released,
+which its page on GitHub names, and the version's changelog section saved to a file:
+
+```sh
+git tag -a server-sdk/vX.Y.Z <released commit> -m 'server-sdk X.Y.Z'
+git push origin server-sdk/vX.Y.Z
+gh release create server-sdk/vX.Y.Z --repo ConfigDirector/php-sdks --verify-tag \
+  --title server-sdk/vX.Y.Z --notes-file <file with the changelog section>
+```
+
+If Packagist does not list the version after that, its hook did not fire: a maintainer of the
+package can start an update from the package's page on Packagist, and
+[The first release of a package](#the-first-release-of-a-package) has the command that checks the
+hook.
+
+### What a release publishes
+
+The archive Composer downloads for a version is built by GitHub from the read-only repository, and
+the `.gitattributes` file of each package leaves the tests, the lock file and the configuration of
+the development tools out of it. `make test-release` lists what the archive of each package holds
+and fails on any other entry: `src`, `composer.json`, `CHANGELOG.md` and `LICENSE` for both, and
+`README.md` and `bin` for the server SDK. So a new development file goes into `.gitattributes`,
+and a new file that an application needs, such as the provider's README once it has one, goes
+into that test. The `LICENSE` of each package is a copy of the one at the root, because only the
+files in a package's directory reach its read-only repository.
+
+### Setting up the read-only repositories
+
+These steps are done once, by an owner of the ConfigDirector organization on GitHub, before the
+first release. Each one ends with a command that changes nothing and proves the step.
+
+**1. Create the two read-only repositories.**
+
+```sh
+gh repo create ConfigDirector/php-server-sdk --public --disable-issues --disable-wiki \
+  --description '[READ ONLY] PHP server SDK for ConfigDirector. Issues and pull requests: https://github.com/ConfigDirector/php-sdks'
+gh repo create ConfigDirector/php-openfeature-server-provider --public --disable-issues --disable-wiki \
+  --description '[READ ONLY] PHP OpenFeature server provider for ConfigDirector. Issues and pull requests: https://github.com/ConfigDirector/php-sdks'
+```
+
+| Setting | What it is for, and what the other choice does |
+|---|---|
+| `--public` | Packagist reads the repository without a login, and cannot read a private one. |
+| No `--add-readme`, `--gitignore` or `--license` | The release pushes the package's own history to `main` and never overwrites another one. A repository created with any of the three holds a commit of its own, and the first release fails at its push with `! [rejected] ... -> main (fetch first)`. |
+| `--disable-issues`, `--disable-wiki` | Issues are answered in php-sdks, so the read-only repository offers no place to open one that nobody watches. |
+
+Prove it: each line has to end with `PUBLIC true`, the `true` being that the repository is empty.
+
+```sh
+for repository in php-server-sdk php-openfeature-server-provider; do
+  gh repo view "ConfigDirector/$repository" --json name,visibility,isEmpty \
+    --jq '"\(.name) \(.visibility) \(.isEmpty)"'
+done
+```
+
+**2. Create the token the workflow pushes with.** It is a fine-grained personal access token, the
+kind the CLI's release pushes to the Homebrew tap with. Open
+<https://github.com/settings/personal-access-tokens/new?name=php-sdks+release&description=Pushes+the+php-sdks+packages+to+their+read-only+repositories&target_name=ConfigDirector&contents=write&expires_in=366>,
+which fills in every row but the repositories, and check each one before **Generate token**:
+
+| Row on the page | Value | What it is for, and what the wrong choice does |
 |---|---|---|
-| configdirector/server-sdk | [`Version.php`](packages/server-sdk/src/Version.php) | [CHANGELOG.md](packages/server-sdk/CHANGELOG.md) |
-| configdirector/openfeature-server-provider | [`Version.php`](packages/openfeature-server-provider/src/Version.php) | [CHANGELOG.md](packages/openfeature-server-provider/CHANGELOG.md) |
+| **Token name** | `php-sdks release` | Only tells this token from your others. |
+| **Resource owner** | `ConfigDirector` | The token only reaches repositories of this owner. Under your own account the two repositories cannot be selected. |
+| **Expiration** | 366 days, the longest the link can ask for | Once it has passed, the push of a release fails as it does for a mistyped token, with `Invalid username or token`, and steps 2 and 3 are done again with a new token. |
+| **Repository access** | **Only select repositories** | Keeps the token away from every other repository of the organization. |
+| **Selected repositories** | `php-server-sdk` and `php-openfeature-server-provider` | The repositories the token may push to. A release of the package whose repository is left out fails at its push with `The requested URL returned error: 403`. |
+| **Permissions** / **Contents** | **Read and write** | Pushing commits and tags. With read-only access the push fails with the same 403. |
+| **Permissions** / **Metadata** | **Read-only** | GitHub adds it by itself; leave it. |
 
-Packagist publishes one package per repository, so a release will copy the package's directory and
-its tag to a read-only repository of its own, `ConfigDirector/php-server-sdk` or
-`ConfigDirector/php-openfeature-server-provider`, which Packagist reads. The release workflow and the
-steps to run it are not written yet; this section will describe them once they are.
+Prove it before storing it: the command asks GitHub whether the token may push to each repository,
+and pushes nothing. Paste the token at the prompt, which does not show it. Each line has to end
+with `200`. `401` means the token is mistyped or expired, and `403` that it may not push to that
+repository: the repository was not selected, **Contents** is not **Read and write**, or the token
+still waits for an organization owner's approval.
+
+```sh
+read -rs TOKEN
+for repository in php-server-sdk php-openfeature-server-provider; do
+  curl --silent --output /dev/null --write-out "$repository %{http_code}\n" --user "x-access-token:$TOKEN" \
+    "https://github.com/ConfigDirector/$repository.git/info/refs?service=git-receive-pack"
+done
+```
+
+**3. Store the token as an Actions secret of this repository.** In the same shell, so that the
+token is never written anywhere else:
+
+```sh
+printf '%s' "$TOKEN" | gh secret set READ_ONLY_REPOSITORIES_TOKEN --repo ConfigDirector/php-sdks
+unset TOKEN
+```
+
+On github.com the same secret is made in this repository's **Settings**, under **Secrets and
+variables**, then **Actions**, on the **Secrets** tab, with **New repository secret**:
+
+| Row on the page | Value | What it is for, and what the wrong choice does |
+|---|---|---|
+| **Name** | `READ_ONLY_REPOSITORIES_TOKEN` | The name the release workflows read. Under any other name, or as an environment secret, the workflow finds nothing and stops before any check runs, saying that the secret is empty or missing. |
+| **Secret** | The token of step 2 | What the release pushes with. |
+
+Prove it: the list has to name `READ_ONLY_REPOSITORIES_TOKEN`, updated just now. GitHub never
+shows a secret's value again, which is why step 2 proves the token first.
+
+```sh
+gh secret list --repo ConfigDirector/php-sdks
+```
+
+**4. Check that nobody holds the vendor name on Packagist.** Packagist gives a vendor name to the
+maintainers of the first package published under it, and a tag pushed to a read-only repository is
+never taken back, so look before the first release. The command has to print
+`{"packageNames":[]}` then, and only packages of this repository later.
+
+```sh
+curl --silent 'https://packagist.org/packages/list.json?vendor=configdirector'
+```
+
+### The first release of a package
+
+A package's name on Packagist comes from the `composer.json` in its repository, so a read-only
+repository can be submitted to Packagist only after its first release, not before. That first run
+of the workflow ends with a warning that Packagist does not list the package yet, and these steps
+follow it, once per package:
+
+| Where | What to do | What it is for, and what goes wrong otherwise |
+|---|---|---|
+| <https://packagist.org/login/> | **Log in with GitHub**, as a member of the ConfigDirector organization | Packagist adds its hook to the read-only repository through this GitHub login, so that every later tag reaches it at once. Logged in with a Packagist password only, the package is submitted without a hook, and Packagist looks at it once a week. |
+| GitHub's authorization page for the Packagist application | Give it access to the ConfigDirector organization | Without it Packagist cannot add the hook to a repository of the organization. |
+| <https://packagist.org/packages/submit> | Enter the read-only repository's URL, such as `https://github.com/ConfigDirector/php-server-sdk`, and submit it | Publishes the package under the name in its `composer.json`. The first one reserves the vendor name `configdirector` for its maintainers, so the second package has to be submitted by one of them. |
+
+Prove the submission, with the package's name in `PACKAGE`: the command prints `v0.1.0`, or
+whichever version was released.
+
+```sh
+PACKAGE=server-sdk
+curl --silent "https://repo.packagist.org/p2/configdirector/$PACKAGE.json" | jq --raw-output '.packages[][].version'
+```
+
+Prove the hook, with the read-only repository's name: the command prints a URL that starts with
+`https://packagist.org/api/github`, followed by `true`. When it prints nothing,
+<https://packagist.org/profile/> shows the package with a warning that it is not synced
+automatically. Then log out of Packagist and in again with GitHub, check the organization's access,
+and open <https://packagist.org/trigger-github-sync/>, or add the hook by hand with the values that
+<https://packagist.org/about#how-to-update-packages> lists.
+
+```sh
+gh api repos/ConfigDirector/php-server-sdk/hooks --jq '.[] | "\(.config.url) \(.active)"'
+```
+
+Last, in an empty folder and on a 64-bit PHP, `composer require configdirector/server-sdk:X.Y.Z`
+has to install the version, and `vendor/configdirector/server-sdk` has to hold no `tests`
+directory.
 
 ### Version line
 

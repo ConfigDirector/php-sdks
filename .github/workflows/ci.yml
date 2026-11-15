@@ -38,6 +38,7 @@ jobs:
       - run: make verify-lock
       - run: make lint
       - run: make audit
+      - run: make test-release
 
   lowest:
     name: Test (lowest allowed dependencies on PHP ${{ matrix.php }})

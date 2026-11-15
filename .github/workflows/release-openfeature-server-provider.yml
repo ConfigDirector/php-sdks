@@ -1,0 +1,24 @@
+name: Release openfeature-server-provider
+
+# Manual by design: releases whatever version packages/openfeature-server-provider/src/Version.php
+# declares on main, through the steps in release-package.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-package.yml
+    permissions:
+      contents: write
+    with:
+      package: openfeature-server-provider
+      read-only-repository: ConfigDirector/php-openfeature-server-provider
+    secrets:
+      READ_ONLY_REPOSITORIES_TOKEN: ${{ secrets.READ_ONLY_REPOSITORIES_TOKEN }}

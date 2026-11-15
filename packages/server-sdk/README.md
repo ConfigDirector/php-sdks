@@ -273,6 +273,13 @@ holds small, runnable applications built on this SDK, one per web framework. Sta
 [`laravel`](https://github.com/ConfigDirector/php-sdks/tree/main/samples/server-sdk/laravel), which
 also runs the streaming process as an Artisan command.
 
+## Contributing
+
+This package is developed in [ConfigDirector/php-sdks](https://github.com/ConfigDirector/php-sdks),
+under `packages/server-sdk`. [ConfigDirector/php-server-sdk](https://github.com/ConfigDirector/php-server-sdk)
+is a read-only copy of that directory, which Packagist installs from, so please open issues and
+pull requests in php-sdks.
+
 ## Getting Help
 
 - [Ask a question in Discussions](https://github.com/orgs/ConfigDirector/discussions)

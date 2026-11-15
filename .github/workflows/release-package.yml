@@ -1,0 +1,187 @@
+name: Release a package
+
+# The release steps for every package, called by each package's release workflow with its name, so
+# the two cannot drift apart. Packagist publishes one package per repository and serves a version
+# from its tag, so a package is released by pushing its directory and a tag to a read-only
+# repository of its own; everything before that push is what stops a version from shipping
+# unchecked.
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: The package's directory under packages/, which is also its name on Packagist and the prefix of its tags in this repository
+        type: string
+        required: true
+      read-only-repository:
+        description: The repository Packagist reads the package from, as owner/name
+        type: string
+        required: true
+    secrets:
+      READ_ONLY_REPOSITORIES_TOKEN:
+        description: A token that may push to the read-only repository
+        required: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PACKAGE: ${{ inputs.package }}
+  READ_ONLY_REPOSITORY: ${{ inputs.read-only-repository }}
+  READ_ONLY_REPOSITORY_URL: https://github.com/${{ inputs.read-only-repository }}.git
+
+jobs:
+  check:
+    name: Check ${{ inputs.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The read-only repository's main branch only ever moves forward, and the history of another
+      # branch's package directory is not one the next release from main could be added to.
+      - name: Refuse a branch other than main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this workflow against main. $GITHUB_REF is not released."
+          exit 1
+
+      - name: Refuse to start without the token for the read-only repository
+        env:
+          READ_ONLY_REPOSITORIES_TOKEN: ${{ secrets.READ_ONLY_REPOSITORIES_TOKEN }}
+        run: |
+          if [[ -z $READ_ONLY_REPOSITORIES_TOKEN ]]; then
+            echo "::error::The READ_ONLY_REPOSITORIES_TOKEN secret of this repository is empty or" \
+                 "missing. See Releasing in CONTRIBUTING.md."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.5"
+          extensions: curl, pcntl
+          tools: composer
+          coverage: none
+        env:
+          update: true
+
+      # Here only to refuse a release in seconds and not after the checks. The release job runs it
+      # again and releases what that run decides.
+      - name: Refuse a version that must not be released
+        run: .github/scripts/release-preflight.sh "$PACKAGE" "$READ_ONLY_REPOSITORY_URL" "$RUNNER_TEMP/release-notes.md"
+
+      # An application installs the package from Packagist, which serves neither this working tree
+      # nor a version of a sibling package that is not released yet.
+      - name: Resolve the package's requirements from Packagist alone
+        run: |
+          resolution=$(mktemp -d)
+          jq 'del(.repositories, ."require-dev")' "packages/$PACKAGE/composer.json" > "$resolution/composer.json"
+          composer update --working-dir="$resolution" --dry-run --no-interaction --no-progress
+
+      - run: make check-all
+
+  # A job of its own, on a checkout that no dependency's code has run in, so that the token for
+  # the read-only repository only ever meets this repository's two release scripts.
+  release:
+    name: Release ${{ inputs.package }}
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # The full history, because the commits pushed to the read-only repository are worked out
+      # from it. No stored credentials: the two pushes below each name the token they use.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.5"
+          tools: none
+          coverage: none
+        env:
+          update: true
+
+      # Reads Version::CURRENT, refuses a version whose tag already exists in the read-only
+      # repository or in this one, or that has no changelog section, and writes that section to
+      # the release notes file.
+      - name: Resolve the version and the release notes
+        id: preflight
+        run: .github/scripts/release-preflight.sh "$PACKAGE" "$READ_ONLY_REPOSITORY_URL" "$RUNNER_TEMP/release-notes.md"
+
+      # The helper holds no token: it hands git the GIT_PUSH_TOKEN of the step that pushes.
+      - name: Name the workflow as the author of the tags and have each push bring its own token
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # shellcheck disable=SC2016
+          git config credential.helper '!f() { echo username=x-access-token; echo "password=$GIT_PUSH_TOKEN"; }; f'
+
+      # This push is the release: Packagist serves the version from the tag it creates.
+      - name: Push the package and its tag to the read-only repository
+        env:
+          TAG: ${{ steps.preflight.outputs.read-only-repository-tag }}
+          GIT_PUSH_TOKEN: ${{ secrets.READ_ONLY_REPOSITORIES_TOKEN }}
+        run: .github/scripts/push-package-to-read-only-repository.sh "$PACKAGE" "$TAG" "$READ_ONLY_REPOSITORY_URL"
+
+      - name: Tag the released commit in this repository
+        env:
+          TAG: ${{ steps.preflight.outputs.monorepo-tag }}
+          VERSION: ${{ steps.preflight.outputs.version }}
+          GIT_PUSH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -a "$TAG" -m "$PACKAGE $VERSION"
+          git push origin "$TAG"
+
+      # --verify-tag refuses to invent a tag should the push above not have landed.
+      - name: Create the GitHub Release from the changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.preflight.outputs.monorepo-tag }}
+          PRERELEASE: ${{ steps.preflight.outputs.prerelease }}
+        run: |
+          prerelease=
+          if [[ $PRERELEASE == true ]]; then
+            prerelease=--prerelease
+          fi
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            $prerelease
+
+      # Packagist learns of the tag through the hook it keeps on the read-only repository. A
+      # package can only be submitted to Packagist once its repository holds a composer.json, so
+      # after a package's first release Packagist does not know it yet, and submitting it is the
+      # step that follows this run.
+      - name: Wait for Packagist to serve the version
+        env:
+          TAG: ${{ steps.preflight.outputs.read-only-repository-tag }}
+        run: |
+          versions_url="https://repo.packagist.org/p2/configdirector/$PACKAGE.json"
+          packagist_status=$(curl --silent --output /dev/null --write-out '%{http_code}' "$versions_url" || true)
+          if [[ $packagist_status == 404 ]]; then
+            echo "::warning::Packagist does not list configdirector/$PACKAGE yet. Submit" \
+                 "https://github.com/$READ_ONLY_REPOSITORY at https://packagist.org/packages/submit:" \
+                 "see 'The first release of a package' in CONTRIBUTING.md."
+            exit 0
+          fi
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --silent --fail "$versions_url" \
+                | jq --exit-status --arg tag "$TAG" 'any(.packages[][]; .version == $tag)' > /dev/null; then
+              echo "Packagist serves configdirector/$PACKAGE $TAG"
+              exit 0
+            fi
+            echo "Packagist does not serve configdirector/$PACKAGE $TAG yet (attempt $attempt of 10)"
+            sleep 30
+          done
+          echo "::error::Packagist did not pick up $TAG, which the read-only repository and the" \
+               "GitHub Release have. Check the Packagist hook on https://github.com/$READ_ONLY_REPOSITORY:" \
+               "see Releasing in CONTRIBUTING.md."
+          exit 1
