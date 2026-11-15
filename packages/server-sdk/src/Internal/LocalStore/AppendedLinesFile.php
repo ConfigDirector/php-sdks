@@ -10,8 +10,6 @@ final readonly class AppendedLinesFile
 
     private const int MODE_READABLE_BY_ITS_OWNER_ONLY = 0o600;
 
-    private const int MILLISECONDS_TO_WAIT_FOR_THE_WRITE_OF_ANOTHER_PROCESS = 250;
-
     public string $path;
 
     private StoreFile $file;
@@ -34,11 +32,7 @@ final readonly class AppendedLinesFile
             }
 
             try {
-                $isFreeToWrite = !self::appendsOfSeveralProcessesCanOverwriteEachOther()
-                    || FileLock::reasonTheOpenFileIsNotLockedExclusiveWithin(
-                        self::MILLISECONDS_TO_WAIT_FOR_THE_WRITE_OF_ANOTHER_PROCESS,
-                        $file,
-                    ) === null;
+                $isFreeToWrite = !self::appendsOfSeveralProcessesCanOverwriteEachOther() || flock($file, LOCK_EX);
                 if (!$isFreeToWrite) {
                     return LineAppend::FileUnwritable;
                 }

@@ -124,7 +124,9 @@ append a line of one mebibyte each to one file at the same moment and reads ever
 which is what lets requests add their telemetry at the same time. That holds on a local file system,
 so the local store does not belong on a network one. On Windows PHP moves to the end of a file and
 writes to it in two steps, so there a process locks the telemetry file for its one write
-(`AppendedLinesFile::append`), and only the Windows jobs of CI run that path. The test in
+(`AppendedLinesFile::append`) and waits for that lock for as long as the writes ahead of its own
+take. Only the Windows jobs of CI run that path, and with a wait limited to 250 milliseconds they
+lost up to 20 of the 50 lines. The test in
 `ClientTelemetryAcrossRequestsTest` of a request killed while it adds its telemetry has the shell
 limit the size of a file, needs `sh`, and is skipped on Windows. `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
 and late in 100,000 reads, 1,000 refreshes of the local store, 100,000 watches and 1,000 clients, the

@@ -42,16 +42,6 @@ final class FileLock
     }
 
     /**
-     * @param resource $openFile
-     */
-    public static function reasonTheOpenFileIsNotLockedExclusiveWithin(
-        int $timeoutMilliseconds,
-        mixed $openFile,
-    ): ?UnacquiredFileLock {
-        return self::reasonTheOpenFileIsNotLockedWithin($timeoutMilliseconds, $openFile, LOCK_EX);
-    }
-
-    /**
      * @param int<1, 2> $sharedOrExclusive
      */
     private static function acquiredWithin(

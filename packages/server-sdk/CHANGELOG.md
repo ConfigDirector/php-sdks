@@ -14,7 +14,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   250 milliseconds at their end, ended without their telemetry and logged the warning
   `[LocalStore] {file} could not be written or locked, so the telemetry of this request was not kept.`
   What is reported and when it is sent stay as they were. On Windows, where PHP cannot append to
-  one file from several processes safely, a request still waits for the one write of another.
+  one file from several processes safely, a request still waits while the requests ahead of it
+  write theirs, one at a time.
 - The telemetry kept in the local store can pass its 8 MiB limit by the telemetry of the requests
   that add theirs at the same moment. A report counts as dropped at most what about 19,000 requests
   could not add since the last report; it had no such limit.
