@@ -115,4 +115,5 @@ jobs:
           update: true
 
       - run: make verify-php
+      - run: make samples
       - run: make samples-local

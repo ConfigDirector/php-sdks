@@ -26,7 +26,7 @@
     ],
     "require": {
         "php": "^8.3",
-        "configdirector/server-sdk": "dev-main",
+        "configdirector/server-sdk": "^0.1.0",
         "open-feature/sdk": "^2.4"
     },
     "require-dev": {
@@ -40,7 +40,7 @@
             "url": "../server-sdk",
             "options": {
                 "versions": {
-                    "configdirector/server-sdk": "dev-main"
+                    "configdirector/server-sdk": "0.1.0"
                 }
             }
         }

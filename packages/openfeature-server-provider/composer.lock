@@ -4,15 +4,15 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "824db6695d215585837919d525d8a122",
+    "content-hash": "afaf3150c602edc03d1041cbffa0cec7",
     "packages": [
         {
             "name": "configdirector/server-sdk",
-            "version": "dev-main",
+            "version": "0.1.0",
             "dist": {
                 "type": "path",
                 "url": "../server-sdk",
-                "reference": "3d94e92e8675b940262892760ee32bdb7c9c9418"
+                "reference": "6d7b9ed756562d683462c0dc0c6bf98156ba5c3f"
             },
             "require": {
                 "ext-curl": "*",
@@ -4734,9 +4734,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "configdirector/server-sdk": 20
-    },
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

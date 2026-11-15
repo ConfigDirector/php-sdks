@@ -14,19 +14,26 @@ Each package is a Composer project of its own, with its own `composer.json`, `co
 and development tools, so that a release can copy it to a repository of its own (see
 [Releasing](#releasing)). Each has its own version, changelog, and release.
 
-The provider reaches the SDK in this working tree through a Composer path repository, which reports
-the SDK as `dev-main` on any branch or commit, and the provider requires exactly that version. Before
-the provider's first release, its requirement has to name a released version of the SDK instead.
+The provider requires a released range of the SDK, `^0.1.0`, which is what an application that
+installs the provider from Packagist gets. In this working tree it reaches the SDK through a
+Composer path repository instead, which reports the SDK in `packages/server-sdk` as `0.1.0` whatever
+its `Version` class says, so the provider's lint and tests always run against the SDK as it is
+here. When the provider needs a later line of the SDK, change the requirement and the version the
+path repository reports together, in the provider's `composer.json`. The provider's release
+workflow then refuses to run until Packagist serves an SDK version in that range.
 
 The lock files are committed and resolved for PHP 8.3.36 (`config.platform.php` in each
 `composer.json`), so one lock installs on every PHP version CI runs. After changing a package's
 `composer.json`, run `composer update` in its directory. After changing the SDK's requirements, also
-run `composer update configdirector/server-sdk` in the provider's directory and in each sample's, so
-they install them too.
+run `composer update configdirector/server-sdk` in the provider's directory, so it installs them
+too.
 
 [`samples/`](samples/) holds sample applications, each a Composer project of its own with a committed
-`composer.lock`, under `samples/<package>/<framework>`. Until a package's first release, a sample
-requires it from this working tree through a path repository, as the provider requires the SDK.
+`composer.lock`, under `samples/<package>/<framework>`. A sample requires a released version of the
+package it shows, the way an application does. `make samples` runs PHPStan and each sample's tests
+against that release. `make samples-local` runs them against the package in this working tree, in
+a throwaway copy of the sample, so a change to a package that breaks the code an application
+writes against it fails before it is released, and the sample's own files stay as they are.
 
 ## Working on the packages
 
@@ -39,7 +46,8 @@ make install       # composer install, every package and sample
 make hooks         # pre-push hook that runs make check-all
 make check         # lint and test: the fast loop
 make test-release  # the release scripts, against throwaway repositories
-make samples-local # PHPStan and the samples' suites, against the packages in this working tree
+make samples       # PHPStan and the samples' suites, against the released packages they require
+make samples-local # the same, against the packages in this working tree
 make check-floor   # lint and the suites on PHP 8.3, in Docker
 make check-all     # everything CI runs
 ```
@@ -63,14 +71,14 @@ matches its `composer.json`. `make audit` runs `composer audit` against each loc
 
 `make test-lowest` runs the suites against the lowest version of every dependency that each
 `composer.json` allows, installed in a throwaway directory, so the committed lock files stay as they
-are. `make check-floor` runs `make verify-php lint test samples-local` in the official `php:8.3-cli`
+are. `make check-floor` runs `make verify-php lint test samples samples-local` in the official `php:8.3-cli`
 image, pulled again on every run so that it is the newest 8.3 release, on a copy of this working tree
 without any `vendor/`. PHP-CS-Fixer is meant to run on the lowest PHP a project supports and warns on a newer one,
 so `make check-all` lints there and not on your own PHP; `make check` and `make format` still run it on
 your PHP and print that warning.
 
 CI runs the suites on PHP 8.3, 8.4 and 8.5 on Ubuntu, on PHP 8.5 on macOS, and on PHP 8.3 and 8.5
-on Windows, and `make test-lowest` and `make samples-local` on PHP 8.3 and 8.5. Locally,
+on Windows, and `make test-lowest`, `make samples` and `make samples-local` on PHP 8.3 and 8.5. Locally,
 `make check-all` covers your own PHP and, through `make check-floor`, PHP 8.3.
 
 The local store tests of the server SDK start real PHP processes that read and write one store, from
@@ -191,6 +199,9 @@ pull requests belong in this one.
    package and its tag to the read-only repository, tags the released commit `<package>/vX.Y.Z`
    in this repository, creates a GitHub Release here with the changelog section as its notes, and
    waits until Packagist serves the version.
+4. Run `composer require configdirector/<package>:^X.Y.Z` in each of the package's samples and
+   merge their `composer.json` and `composer.lock`, so the samples install the new version and
+   `make samples` checks it.
 
 A version is `X.Y.Z`, or `X.Y.Z-alpha.N`, `X.Y.Z-beta.N` or `X.Y.Z-rc.N` for a prerelease, which is
 marked as one on GitHub and which Composer installs only for an application that asks for that

@@ -4,15 +4,21 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6b16b1942a634c18907c05ef17f3f981",
+    "content-hash": "334b5cdedbf948bb066e7fe0bed56b18",
     "packages": [
         {
             "name": "configdirector/server-sdk",
-            "version": "dev-main",
+            "version": "v0.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/ConfigDirector/php-server-sdk.git",
+                "reference": "60aca0bc3e99d6e54eddb869fa736bd31f36a4c0"
+            },
             "dist": {
-                "type": "path",
-                "url": "../../../packages/server-sdk",
-                "reference": "3d94e92e8675b940262892760ee32bdb7c9c9418"
+                "type": "zip",
+                "url": "https://api.github.com/repos/ConfigDirector/php-server-sdk/zipball/60aca0bc3e99d6e54eddb869fa736bd31f36a4c0",
+                "reference": "60aca0bc3e99d6e54eddb869fa736bd31f36a4c0",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -38,11 +44,7 @@
                     "ConfigDirector\\": "src/"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "ConfigDirector\\Tests\\": "tests/"
-                }
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -63,9 +65,11 @@
                 "remote config",
                 "remote configuration"
             ],
-            "transport-options": {
-                "relative": true
-            }
+            "support": {
+                "source": "https://github.com/ConfigDirector/php-server-sdk/tree/v0.1.0"
+            },
+            "time": "2026-11-15T02:39:39+00:00",
+            "published-time": "2026-11-15T02:52:58+00:00"
         },
         {
             "name": "fig/http-message-util",
@@ -5581,9 +5585,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "configdirector/server-sdk": 20
-    },
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

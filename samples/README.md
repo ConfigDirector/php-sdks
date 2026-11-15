@@ -10,10 +10,10 @@ different web frameworks, grouped by the package they demonstrate.
 | [slim/](server-sdk/slim/) | [Slim](https://www.slimframework.com) | Minimal PSR-7 app: one client per request from the container, per-request evaluation |
 | [laravel/](server-sdk/laravel/) | [Laravel](https://laravel.com) | A client per request from a scoped binding, and the streaming process as an Artisan command |
 
-Each sample is an independent Composer project with its own `composer.json` and `composer.lock`.
-Until the SDK's first release, a sample requires it from this working tree through a Composer path
-repository, so it runs the SDK as it is in your checkout. `make samples-local` runs PHPStan and the
-tests of every sample that way.
+Each sample is an independent Composer project with its own `composer.json` and `composer.lock`,
+and requires a released version of the SDK from Packagist, the way your application does.
+`make samples` runs PHPStan and the tests of every sample against that release, and
+`make samples-local` against the SDK as it is in your checkout.
 
 To run one:
 

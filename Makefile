@@ -1,12 +1,12 @@
-.PHONY: install hooks verify-php verify-lock format lint test test-lowest test-release samples-local check-floor \
-	audit benchmark check check-all clean
+.PHONY: install hooks verify-php verify-lock format lint test test-lowest test-release samples samples-local \
+	check-floor audit benchmark check check-all clean
 
 # Every package this repository publishes, each in a directory under packages/ named after its Composer
 # package. Narrow a target to one of them with, for example, `make test PACKAGES=server-sdk`.
 PACKAGES := server-sdk openfeature-server-provider
 
-# Sample applications, each a Composer project under samples/<package>/<framework> that requires the packages
-# from this working tree through a path repository.
+# Sample applications, each a Composer project under samples/<package>/<framework> that requires a released
+# version of that package, the way an application does.
 SAMPLES := samples/server-sdk/slim samples/server-sdk/laravel
 
 # Every Composer project in this repository: the packages, then the samples. `install`, `verify-lock`, `format`,
@@ -84,12 +84,36 @@ test-release:
 	@printf '\n\033[1m==> test-release\033[0m\n'
 	.github/scripts/release-test.sh
 
-# PHPStan and the suite of each sample, against the packages in this working tree, which is what catches a
-# change to a package that breaks the code an application writes against it.
-samples-local: install
+# PHPStan and the suite of each sample, against the released package its composer.lock names, the way an
+# application installs it.
+samples:
 	@for sample in $(SAMPLES); do \
-		printf '\n\033[1m==> samples-local %s\033[0m\n' "$$sample"; \
-		(cd "$$sample" && php vendor/bin/phpstan analyse --no-progress && php vendor/bin/phpunit) || exit 1; \
+		printf '\n\033[1m==> samples %s (released package)\033[0m\n' "$$sample"; \
+		(cd "$$sample" \
+			&& composer install --no-interaction --no-progress \
+			&& php vendor/bin/phpstan analyse --no-progress \
+			&& php vendor/bin/phpunit) || exit 1; \
+	done
+
+# The same checks against the package in this working tree, which is what catches a change to a package
+# that breaks the code an application writes against it; `samples` cannot, because a sample's lock names
+# a release. Each sample is copied to a throwaway directory, where its requirement becomes the package's
+# directory here, so the sample's own composer.json, composer.lock and vendor/ stay as they are. Every
+# other dependency stays at the version the sample's lock names.
+samples-local:
+	@for sample in $(SAMPLES); do \
+		printf '\n\033[1m==> samples-local %s (working-tree package)\033[0m\n' "$$sample"; \
+		package=$$(basename "$$(dirname "$$sample")"); \
+		copy=$$(mktemp -d); \
+		tar -C "$$sample" --exclude=./vendor --exclude=./.env --exclude=./.phpunit.cache -cf - . | tar -C "$$copy" -xf - \
+		&& (cd "$$copy" \
+			&& composer config repositories.working-tree \
+				"{\"type\": \"path\", \"url\": \"$(CURDIR)/packages/$$package\", \"options\": {\"versions\": {\"configdirector/$$package\": \"dev-main\"}}}" \
+			&& composer require --no-update --no-interaction "configdirector/$$package:dev-main" \
+			&& composer update "configdirector/$$package" --with-dependencies --no-interaction --no-progress \
+			&& php vendor/bin/phpstan analyse --no-progress \
+			&& php vendor/bin/phpunit); \
+		status=$$?; rm -rf "$$copy"; [ "$$status" -eq 0 ] || exit "$$status"; \
 	done
 
 # The lint and the suites on the oldest supported PHP line, in its official image, from a copy of this
@@ -103,7 +127,7 @@ check-floor:
 	docker run --rm --volume "$(CURDIR)":/source:ro --env COMPOSER_ROOT_VERSION=dev-main $(FLOOR_TAG) sh -c '\
 		mkdir /work \
 		&& tar -C /source --exclude=./.git --exclude=vendor --exclude=.phpunit.cache -cf - . | tar -C /work -xf - \
-		&& make -C /work verify-php lint test samples-local'
+		&& make -C /work verify-php lint test samples samples-local'
 
 audit:
 	@for project in $(PROJECTS); do \
@@ -123,7 +147,7 @@ benchmark:
 check: lint test
 
 # Everything CI runs. The pre-push hook calls this.
-check-all: verify-php verify-lock test test-lowest test-release samples-local check-floor audit
+check-all: verify-php verify-lock test test-lowest test-release samples samples-local check-floor audit
 	@printf '\n\033[1m✓ all checks passed\033[0m\n'
 
 clean:
