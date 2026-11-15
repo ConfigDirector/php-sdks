@@ -21,7 +21,8 @@
     "homepage": "https://www.configdirector.com",
     "authors": [
         {
-            "name": "ConfigDirector"
+            "name": "ConfigDirector",
+            "homepage": "https://www.configdirector.com"
         }
     ],
     "require": {

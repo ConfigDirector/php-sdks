@@ -12,7 +12,7 @@
             "dist": {
                 "type": "path",
                 "url": "../server-sdk",
-                "reference": "6d7b9ed756562d683462c0dc0c6bf98156ba5c3f"
+                "reference": "b898bebbd6a241e29d4a15b77d7d3f5e35ee8a4d"
             },
             "require": {
                 "ext-curl": "*",
@@ -48,7 +48,8 @@
             ],
             "authors": [
                 {
-                    "name": "ConfigDirector"
+                    "name": "ConfigDirector",
+                    "homepage": "https://www.configdirector.com"
                 }
             ],
             "description": "PHP server SDK for ConfigDirector. ConfigDirector is a remote configuration and feature flag service.",
