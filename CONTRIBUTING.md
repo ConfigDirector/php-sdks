@@ -104,10 +104,13 @@ milliseconds meanwhile. The test is about what the processes do to each other, n
 requests a machine serves, so it is kept light enough for a CI runner with a few slow cores: every
 process loads the SDK's classes and waits for the others before it serves, a request lasts 300 to 500
 milliseconds, and about 125 requests end each second. A process that waits for the CPU while it holds
-a lock makes the others wait past the 250 milliseconds they give the telemetry lock, and the test
-fails on the telemetry that is then not kept: the first version, at 2,400 requests a second, failed
-that way on one CPU and on the macOS and Windows runners, and this one passes on a quarter of a CPU
-(`docker run --cpus=0.25`). `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
+a lock makes the others wait past the 250 milliseconds they give the telemetry lock, and they end
+without their telemetry and log that. The first version, at 2,400 requests a second, lost telemetry
+that way on one CPU and on the macOS and Windows runners; this one loses none on a quarter of a CPU
+(`docker run --cpus=0.25`). The tests count each request that logged it and expect every other read
+in a report exactly once, so telemetry lost without that line, or reported twice, fails them on any
+machine. When requests did lose their telemetry, the test writes how many, and how long their
+`dispose()` took, to standard error. `ClientMemoryInALongRunningProcessTest` compares `memory_get_usage()` early
 and late in 100,000 reads, 1,000 refreshes of the local store, 100,000 watches and 1,000 clients, the
 last with the cycle collector off, so that a client is freed when it is disposed of and not later.
 `SourceOfTheSdkTest` reads the source for calls to functions of PHP extensions that `composer.json`

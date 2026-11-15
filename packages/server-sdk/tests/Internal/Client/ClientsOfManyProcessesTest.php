@@ -54,7 +54,7 @@ final class ClientsOfManyProcessesTest extends TestCase
         TemporaryFolder::remove($this->folderOfTheRecords);
     }
 
-    public function testFiftyProcessesServingRequestsForFivePollingIntervalsPollOncePerIntervalAndReportEveryReadOnce(): void
+    public function testFiftyProcessesServingRequestsForFivePollingIntervalsPollOncePerIntervalAndReportOnceEveryReadTheyKept(): void
     {
         $server = $this->serverServingAPageSizeOf25();
         $acceleratedMillisecondsBeforeTheFirstRequest = $this->startFiftyProcessesThatServeRequestsOnceAllHaveStarted();
@@ -72,9 +72,12 @@ final class ClientsOfManyProcessesTest extends TestCase
         $polls = self::requestsTo('/server/polling/v1', $server);
         $reports = self::requestsTo('/server/telemetry/v1', $server);
         $readsRecordedByContextId = $this->readsRecordedByContextId();
+        $readsOfRequestsThatKeptTheirTelemetryByContextId = $this->readsOfRequestsThatKeptTheirTelemetryByContextId();
+        $this->writeToStandardErrorHowManyRequestsDidNotKeepTheirTelemetry();
         self::assertSame('', $this->standardErrorOfEveryProcess());
-        self::assertSame([], $this->recordedLinesOtherThanAReadOf25());
+        self::assertSame([], $this->recordedLinesOtherThanAReadOf25AndTelemetryNotKept());
         self::assertCount(self::PROCESSES + 1, $readsRecordedByContextId);
+        self::assertSame(1, $readsOfRequestsThatKeptTheirTelemetryByContextId['user-of-the-last-request'] ?? 0);
         self::assertLessThanOrEqual(
             intdiv($acceleratedMillisecondsUntilTheLastRequestEnded, self::POLLING_INTERVAL_MILLISECONDS) + 1,
             count($polls),
@@ -92,7 +95,10 @@ final class ClientsOfManyProcessesTest extends TestCase
             intdiv($acceleratedMillisecondsTheProcessesRan, self::FLUSH_INTERVAL_MILLISECONDS) - 2,
             count($reports),
         );
-        self::assertSame($readsRecordedByContextId, self::evaluationsReportedByContextId($reports));
+        self::assertSame(
+            $readsOfRequestsThatKeptTheirTelemetryByContextId,
+            self::evaluationsReportedByContextId($reports),
+        );
         self::assertSame(array_fill(0, count($reports), 0), self::evaluationsReportedAsDroppedIn($reports));
     }
 
@@ -120,8 +126,9 @@ final class ClientsOfManyProcessesTest extends TestCase
         $evaluationsReportedByContextId = self::evaluationsReportedByContextId(
             self::requestsTo('/server/telemetry/v1', $server),
         );
+        $this->writeToStandardErrorHowManyRequestsDidNotKeepTheirTelemetry();
         self::assertSame('', $this->standardErrorOfEveryProcess());
-        self::assertSame([], $this->recordedLinesOtherThanAReadOf25());
+        self::assertSame([], $this->recordedLinesOtherThanAReadOf25AndTelemetryNotKept());
         self::assertSame(1, $readsRecordedByContextId['user-of-the-last-request']);
         self::assertCount($pollsBeforeTheLastRequest + 1, $polls);
         self::assertLessThanOrEqual(
@@ -282,14 +289,70 @@ final class ClientsOfManyProcessesTest extends TestCase
     }
 
     /**
+     * @return array<string, int>
+     */
+    private function readsOfRequestsThatKeptTheirTelemetryByContextId(): array
+    {
+        $readsByContextId = [];
+        foreach ($this->finishedLinesRecordedByContextId() as $contextId => $lines) {
+            $reads = count(array_keys($lines, 'read 25', true));
+            $requestsThatDidNotKeepTheirTelemetry = count(
+                self::millisecondsRequestsWaitedThatDidNotKeepTheirTelemetry($lines),
+            );
+            if ($reads > $requestsThatDidNotKeepTheirTelemetry) {
+                $readsByContextId[$contextId] = $reads - $requestsThatDidNotKeepTheirTelemetry;
+            }
+        }
+        ksort($readsByContextId);
+
+        return $readsByContextId;
+    }
+
+    /**
      * @return list<string>
      */
-    private function recordedLinesOtherThanAReadOf25(): array
+    private function recordedLinesOtherThanAReadOf25AndTelemetryNotKept(): array
     {
-        return array_values(array_unique(array_diff(
+        return array_values(array_unique(array_filter(
             array_merge(...array_values($this->finishedLinesRecordedByContextId())),
-            ['read 25'],
+            static fn(string $line): bool => $line !== 'read 25' && !str_starts_with($line, 'telemetry-not-kept '),
         )));
+    }
+
+    private function writeToStandardErrorHowManyRequestsDidNotKeepTheirTelemetry(): void
+    {
+        $everyLine = array_merge(...array_values($this->finishedLinesRecordedByContextId()));
+        $millisecondsWaited = self::millisecondsRequestsWaitedThatDidNotKeepTheirTelemetry($everyLine);
+        if ($millisecondsWaited === []) {
+            return;
+        }
+
+        fwrite(STDERR, sprintf(
+            "\n%s: %d of %d requests could not take the telemetry lock and logged that their telemetry was not "
+            . "kept. Their dispose() took %d to %d milliseconds.\n",
+            $this->name(),
+            count($millisecondsWaited),
+            count(array_keys($everyLine, 'read 25', true)),
+            min($millisecondsWaited),
+            max($millisecondsWaited),
+        ));
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return list<int>
+     */
+    private static function millisecondsRequestsWaitedThatDidNotKeepTheirTelemetry(array $lines): array
+    {
+        $millisecondsWaited = [];
+        foreach ($lines as $line) {
+            if (str_starts_with($line, 'telemetry-not-kept ')) {
+                $millisecondsWaited[] = (int) substr($line, strlen('telemetry-not-kept '));
+            }
+        }
+
+        return $millisecondsWaited;
     }
 
     /**
