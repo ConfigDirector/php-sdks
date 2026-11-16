@@ -7,7 +7,7 @@ PACKAGES := server-sdk openfeature-server-provider
 
 # Sample applications, each a Composer project under samples/<package>/<framework> that requires a released
 # version of that package, the way an application does.
-SAMPLES := samples/server-sdk/slim samples/server-sdk/laravel
+SAMPLES := samples/server-sdk/slim samples/server-sdk/laravel samples/openfeature-server-provider/slim
 
 # Every Composer project in this repository: the packages, then the samples. `install`, `verify-lock`, `format`,
 # `lint`, `audit` and `clean` run on each of them; `test` and `test-lowest` run on the packages only.
@@ -95,18 +95,29 @@ samples:
 			&& php vendor/bin/phpunit) || exit 1; \
 	done
 
-# The same checks against the package in this working tree, which is what catches a change to a package
+# The same checks against the packages in this working tree, which is what catches a change to a package
 # that breaks the code an application writes against it; `samples` cannot, because a sample's lock names
 # a release. Each sample is copied to a throwaway directory, where its requirement becomes the package's
-# directory here, so the sample's own composer.json, composer.lock and vendor/ stay as they are. Every
-# other dependency stays at the version the sample's lock names.
+# directory here, so the sample's own composer.json, composer.lock and vendor/ stay as they are. Composer
+# reads the path repositories of a package only when that package is the project it installs, so the
+# copy gets the package's own path repositories too, at the versions they report, which the package's
+# requirements accept: the provider's sample then also installs the server SDK from here. The package's
+# dependencies may move within the ranges it requires, and every other dependency stays at the version
+# the sample's lock names.
 samples-local:
 	@for sample in $(SAMPLES); do \
-		printf '\n\033[1m==> samples-local %s (working-tree package)\033[0m\n' "$$sample"; \
+		printf '\n\033[1m==> samples-local %s (working-tree packages)\033[0m\n' "$$sample"; \
 		package=$$(basename "$$(dirname "$$sample")"); \
 		copy=$$(mktemp -d); \
 		tar -C "$$sample" --exclude=./vendor --exclude=./.env --exclude=./.phpunit.cache -cf - . | tar -C "$$copy" -xf - \
 		&& (cd "$$copy" \
+			&& composer config --list --working-dir "$(CURDIR)/packages/$$package" \
+				| sed -n 's|^\[repositories\.[^]]*\.options\.versions\.configdirector/\([^]]*\)\] \(.*\)$$|\1 \2|p' \
+				| while read -r dependency version; do \
+					composer config --no-interaction "repositories.working-tree-$$dependency" \
+						"{\"type\": \"path\", \"url\": \"$(CURDIR)/packages/$$dependency\", \"options\": {\"versions\": {\"configdirector/$$dependency\": \"$$version\"}}}" \
+						< /dev/null || exit 1; \
+				done \
 			&& composer config repositories.working-tree \
 				"{\"type\": \"path\", \"url\": \"$(CURDIR)/packages/$$package\", \"options\": {\"versions\": {\"configdirector/$$package\": \"dev-main\"}}}" \
 			&& composer require --no-update --no-interaction "configdirector/$$package:dev-main" \

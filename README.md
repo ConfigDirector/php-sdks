@@ -47,7 +47,7 @@ To run it from your own command, such as an Artisan or Symfony Console command, 
 
 ## Sample apps
 
-Small, runnable applications live under [`samples/`](samples/), grouped by the package they demonstrate. Start with the [Slim sample](samples/server-sdk/slim/) for the server SDK, or the [Laravel sample](samples/server-sdk/laravel/), which also runs the streaming process as an Artisan command.
+Small, runnable applications live under [`samples/`](samples/), grouped by the package they demonstrate. Start with the [Slim sample](samples/server-sdk/slim/) for the server SDK, or the [Laravel sample](samples/server-sdk/laravel/), which also runs the streaming process as an Artisan command. The [OpenFeature Slim sample](samples/openfeature-server-provider/slim/) reads the same configs through the OpenFeature provider.
 
 ## Getting Help
 

@@ -33,7 +33,9 @@ too.
 package it shows, the way an application does. `make samples` runs PHPStan and each sample's tests
 against that release. `make samples-local` runs them against the package in this working tree, in
 a throwaway copy of the sample, so a change to a package that breaks the code an application
-writes against it fails before it is released, and the sample's own files stay as they are.
+writes against it fails before it is released, and the sample's own files stay as they are. The
+copy also gets the package's own path repositories, which Composer ignores once the package is a
+dependency, so the provider's sample runs on the server SDK of this working tree as well.
 
 ## Working on the packages
 
