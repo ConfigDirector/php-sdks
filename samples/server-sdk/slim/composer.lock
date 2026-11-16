@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "334b5cdedbf948bb066e7fe0bed56b18",
+    "content-hash": "88cece3f522ff10f1baf013d8108cc2f",
     "packages": [
         {
             "name": "configdirector/server-sdk",
-            "version": "v0.1.0",
+            "version": "v0.1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ConfigDirector/php-server-sdk.git",
-                "reference": "60aca0bc3e99d6e54eddb869fa736bd31f36a4c0"
+                "reference": "dcdde360969ce78a2701cfc10e91016f35b80c12"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ConfigDirector/php-server-sdk/zipball/60aca0bc3e99d6e54eddb869fa736bd31f36a4c0",
-                "reference": "60aca0bc3e99d6e54eddb869fa736bd31f36a4c0",
+                "url": "https://api.github.com/repos/ConfigDirector/php-server-sdk/zipball/dcdde360969ce78a2701cfc10e91016f35b80c12",
+                "reference": "dcdde360969ce78a2701cfc10e91016f35b80c12",
                 "shasum": ""
             },
             "require": {
@@ -50,7 +50,8 @@
             ],
             "authors": [
                 {
-                    "name": "ConfigDirector"
+                    "name": "ConfigDirector",
+                    "homepage": "https://www.configdirector.com"
                 }
             ],
             "description": "PHP server SDK for ConfigDirector. ConfigDirector is a remote configuration and feature flag service.",
@@ -66,10 +67,10 @@
                 "remote configuration"
             ],
             "support": {
-                "source": "https://github.com/ConfigDirector/php-server-sdk/tree/v0.1.0"
+                "source": "https://github.com/ConfigDirector/php-server-sdk/tree/v0.1.1"
             },
-            "time": "2026-11-15T02:39:39+00:00",
-            "published-time": "2026-11-15T02:52:58+00:00"
+            "time": "2026-11-16T18:08:02+00:00",
+            "published-time": "2026-11-16T18:29:56+00:00"
         },
         {
             "name": "fig/http-message-util",

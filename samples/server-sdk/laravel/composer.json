@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "configdirector/server-sdk": "^0.1.0",
+        "configdirector/server-sdk": "^0.1.1",
         "laravel/framework": "^13.42"
     },
     "require-dev": {
