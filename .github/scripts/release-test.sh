@@ -373,6 +373,7 @@ pass
 scenario=the_archive_of_the_openfeature_server_provider_holds_what_an_application_runs_and_reads_and_no_tests
 assert_archive_of_package openfeature-server-provider "CHANGELOG.md
 LICENSE
+README.md
 composer.json
 src"
 pass

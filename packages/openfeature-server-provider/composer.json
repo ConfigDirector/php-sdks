@@ -30,6 +30,9 @@
         "configdirector/server-sdk": "^0.1.0",
         "open-feature/sdk": "^2.4"
     },
+    "conflict": {
+        "myclabs/php-enum": "<1.8.1"
+    },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.3",

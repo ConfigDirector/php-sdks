@@ -59,7 +59,7 @@ Targets that run per package take `PACKAGES`, so `make test PACKAGES=server-sdk`
 level with no baseline; a finding is fixed, not ignored. `make format` applies PHP-CS-Fixer's fixes.
 PHPUnit fails a run on warnings, notices, deprecations and risky tests.
 
-The server SDK's `phpstan.dist.neon` also turns on several checks that no PHPStan level includes, such
+Each package's `phpstan.dist.neon` also turns on several checks that no PHPStan level includes, such
 as a missing `#[\Override]` and a property a constructor leaves unset. The files in
 `packages/server-sdk/tests/StaticAnalysis/` are not PHPUnit tests: PHPStan checks each `assertType()`
 call in them during `make lint`, which is how the types a caller's static analysis sees from
@@ -165,6 +165,14 @@ which holds one event stream open and sends what the test writes to it. Each req
 the test's own process. Its test that stops the command with SIGTERM needs pcntl too, which CI's
 samples job installs.
 
+The provider's tests create it as an application does and read flags through the OpenFeature client
+API. A package does not load another package's tests, so the provider has its own trimmed copy of
+the scripted SDK server, `packages/openfeature-server-provider/tests/Support/Processes/scripted-sdk-server.php`,
+which gives every request the same answer. Its context tests serve offline values and read the
+context each evaluation received through the client's `configEvaluated` hook. The tests of the
+version the provider reports run a PHP process that declares the provider's `Version` class with a
+version of its own.
+
 The checks live in the [Makefile](Makefile). CI and the pre-push hook only call `make` targets, so add
 new checks there rather than in either of them.
 
@@ -248,11 +256,11 @@ hook.
 The archive Composer downloads for a version is built by GitHub from the read-only repository, and
 the `.gitattributes` file of each package leaves the tests, the lock file and the configuration of
 the development tools out of it. `make test-release` lists what the archive of each package holds
-and fails on any other entry: `src`, `composer.json`, `CHANGELOG.md` and `LICENSE` for both, and
-`README.md` and `bin` for the server SDK. So a new development file goes into `.gitattributes`,
-and a new file that an application needs, such as the provider's README once it has one, goes
-into that test. The `LICENSE` of each package is a copy of the one at the root, because only the
-files in a package's directory reach its read-only repository.
+and fails on any other entry: `src`, `composer.json`, `CHANGELOG.md`, `LICENSE` and `README.md`
+for both, and `bin` for the server SDK. So a new development file goes into `.gitattributes`, and
+a new file that an application needs goes into that test. The `LICENSE` of each package is a copy
+of the one at the root, because only the files in a package's directory reach its read-only
+repository.
 
 ### Setting up the read-only repositories
 

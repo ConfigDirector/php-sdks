@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "afaf3150c602edc03d1041cbffa0cec7",
+    "content-hash": "5c1754e79147f02fd26a889fffefc6e7",
     "packages": [
         {
             "name": "configdirector/server-sdk",

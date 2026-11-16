@@ -15,6 +15,10 @@
          failOnPhpunitDeprecation="true"
          failOnRisky="true"
          failOnWarning="true">
+    <php>
+        <ini name="zend.exception_ignore_args" value="0"/>
+    </php>
+
     <testsuites>
         <testsuite name="openfeature-server-provider">
             <directory>tests</directory>
