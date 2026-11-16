@@ -16,12 +16,19 @@ final readonly class EventReporter
 {
     private const int ONE_HOUR_MILLISECONDS = 3_600_000;
 
+    private const int TIME_LIMIT_OF_THE_REPORTS_OF_ONE_SEND_MILLISECONDS = 5_000;
+
     public function __construct(
         private TelemetryEndpoint $endpoint,
         private int $eventQueueLimit,
         private Clock $clock,
         private LoggerInterface $logger,
     ) {}
+
+    public function emptyTelemetryCollectingSince(int $epochMilliseconds): CollectedTelemetry
+    {
+        return new CollectedTelemetry($this->eventQueueLimit, $epochMilliseconds, $this->endpoint->metaContext);
+    }
 
     public function sendingIsPausedUnder(SharedTelemetryLock|ExclusiveTelemetryLock $telemetryLock): bool
     {
@@ -34,54 +41,97 @@ final readonly class EventReporter
     public function send(StoredTelemetry $storedTelemetry, LocalStore $store): void
     {
         $now = $this->clock->epochMilliseconds();
-        $report = new CollectedTelemetry($this->eventQueueLimit, collectingSinceEpochMilliseconds: $now);
+        $reports = new ReportsPerMetaContext($this->endpoint->metaContext, $this->eventQueueLimit, $now);
         foreach ($storedTelemetry->telemetryFileLinesReadOnce() as $telemetryFileLine) {
-            $report->addTelemetryOfTheFileLine($telemetryFileLine);
+            $reports->addTelemetryOfTheFileLine($telemetryFileLine);
         }
-        $droppedCounts = $storedTelemetry->droppedCountsReadOnce();
-        $report->countAsDropped($droppedCounts->evaluations, $droppedCounts->capturedContexts);
-        if ($report->isEmpty()) {
-            return;
-        }
-        if ($report->trackedEventsLeftOut() > 0) {
+        $reports->countAsDroppedUnderTheSender($storedTelemetry->droppedCountsReadOnce());
+
+        if ($reports->trackedEventsLeftOut() > 0) {
             $this->logger->warning(TrackedEventWarning::ReportAlreadyFull->messageOfTheFirstInABatch());
         }
 
-        $answer = $this->endpoint->answerToAReportOf($report, $now);
-        match ($answer->kind) {
-            ReportAnswerKind::Accepted => $this->logger->debug('[EventReporter] Telemetry report successfully sent.'),
-            ReportAnswerKind::RefusedUnrecoverably => $this->stopTelemetryForOneHour($answer, $store),
-            ReportAnswerKind::Refused => $this->discardTheReportRefusedBy($answer, $report, $store),
-            ReportAnswerKind::Unanswered => $this->discardTheReportLeftUnansweredBy($answer, $report, $store),
-        };
+        $reportsNotYetAnswered = $reports->reportsHoldingTelemetry();
+        $timeLimitEndsAtMonotonicMilliseconds = $this->clock->monotonicMilliseconds()
+            + self::TIME_LIMIT_OF_THE_REPORTS_OF_ONE_SEND_MILLISECONDS;
+        while ($reportsNotYetAnswered !== []) {
+            $millisecondsLeft = $timeLimitEndsAtMonotonicMilliseconds - $this->clock->monotonicMilliseconds();
+            $answer = $this->endpoint->answerToAReportOf($reportsNotYetAnswered[0], $now, max(1, $millisecondsLeft));
+            $reportsNotYetAnswered = match ($answer->kind) {
+                ReportAnswerKind::Accepted => $this->reportsLeftAfterTheFirstWasAccepted($reportsNotYetAnswered),
+                ReportAnswerKind::Refused => $this->reportsLeftAfterDiscardingTheFirstRefusedBy(
+                    $answer,
+                    $reportsNotYetAnswered,
+                    $store,
+                ),
+                ReportAnswerKind::RefusedUnrecoverably => $this->noReportsLeftAfterStoppingTelemetryForOneHour(
+                    $answer,
+                    $store,
+                ),
+                ReportAnswerKind::Unanswered => $this->noReportsLeftAfterDiscardingThoseLeftUnansweredBy(
+                    $answer,
+                    $reportsNotYetAnswered,
+                    $store,
+                ),
+            };
+        }
     }
 
-    private function discardTheReportRefusedBy(
+    /**
+     * @param non-empty-list<CollectedTelemetry> $reports
+     *
+     * @return list<CollectedTelemetry>
+     */
+    private function reportsLeftAfterTheFirstWasAccepted(array $reports): array
+    {
+        $this->logger->debug('[EventReporter] Telemetry report successfully sent.');
+
+        return array_slice($reports, 1);
+    }
+
+    /**
+     * @param non-empty-list<CollectedTelemetry> $reports
+     *
+     * @return list<CollectedTelemetry>
+     */
+    private function reportsLeftAfterDiscardingTheFirstRefusedBy(
         ReportAnswer $refusal,
-        CollectedTelemetry $report,
+        array $reports,
         LocalStore $store,
-    ): void {
+    ): array {
         $this->logger->warning(
             '[EventReporter] The telemetry endpoint responded with status {status}. The events in this report were '
             . 'discarded.',
             ['status' => $refusal->status],
         );
-        $this->countAsDropped($report, $store);
+        $this->countAsDropped([$reports[0]], $store);
+
+        return array_slice($reports, 1);
     }
 
-    private function discardTheReportLeftUnansweredBy(
+    /**
+     * @param non-empty-list<CollectedTelemetry> $reports
+     *
+     * @return array{}
+     */
+    private function noReportsLeftAfterDiscardingThoseLeftUnansweredBy(
         ReportAnswer $answer,
-        CollectedTelemetry $report,
+        array $reports,
         LocalStore $store,
-    ): void {
+    ): array {
         $this->logger->warning(
             '[EventReporter] Error attempting to send telemetry data: {error}',
             ['error' => $answer->detail],
         );
-        $this->countAsDropped($report, $store);
+        $this->countAsDropped($reports, $store);
+
+        return [];
     }
 
-    private function stopTelemetryForOneHour(ReportAnswer $refusal, LocalStore $store): void
+    /**
+     * @return array{}
+     */
+    private function noReportsLeftAfterStoppingTelemetryForOneHour(ReportAnswer $refusal, LocalStore $store): array
     {
         $this->logger->warning(
             '[EventReporter] Received a fatal status response ({status}) from the telemetry endpoint. No more '
@@ -103,16 +153,25 @@ final readonly class EventReporter
             );
             $telemetryLock->discardStoredTelemetry();
         });
+
+        return [];
     }
 
-    private function countAsDropped(CollectedTelemetry $unsentReport, LocalStore $store): void
+    /**
+     * @param list<CollectedTelemetry> $unsentReports
+     */
+    private function countAsDropped(array $unsentReports, LocalStore $store): void
     {
+        $evaluations = 0;
+        $capturedContexts = 0;
+        foreach ($unsentReports as $unsentReport) {
+            $evaluations += $unsentReport->evaluationsCollected();
+            $capturedContexts += $unsentReport->capturedContextsCollected();
+        }
+
         $store->whileHoldingTheTelemetryLockShared(
-            static function (SharedTelemetryLock $telemetryLock) use ($unsentReport): void {
-                $telemetryLock->countAsDropped(
-                    $unsentReport->evaluationsCollected(),
-                    $unsentReport->capturedContextsCollected(),
-                );
+            static function (SharedTelemetryLock $telemetryLock) use ($evaluations, $capturedContexts): void {
+                $telemetryLock->countAsDropped($evaluations, $capturedContexts);
             },
         );
     }

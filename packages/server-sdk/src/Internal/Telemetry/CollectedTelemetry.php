@@ -27,8 +27,14 @@ final class CollectedTelemetry
 
     private int $droppedCapturedContexts = 0;
 
-    public function __construct(int $eventQueueLimit, private int $collectingSinceEpochMilliseconds)
-    {
+    /**
+     * @param array<string, string> $metaContext
+     */
+    public function __construct(
+        int $eventQueueLimit,
+        private int $collectingSinceEpochMilliseconds,
+        private readonly array $metaContext,
+    ) {
         $capturedContextLimit = intdiv($eventQueueLimit * 3, 10);
         $this->capturedContextJsonsByKindAndIdentifier = new NewestEntries($capturedContextLimit);
         $this->evaluationCountsByEventJson = new NewestEntries($eventQueueLimit - $capturedContextLimit);
@@ -113,6 +119,7 @@ final class CollectedTelemetry
         return json_encode(
             [
                 'collectingSince' => $this->collectingSinceEpochMilliseconds,
+                'metaContext' => $this->metaContext,
                 'evaluationCounts' => $this->evaluationCountsByEventJson->entriesByKey(),
                 'capturedContexts' => $this->capturedContextJsonsByKindAndIdentifier->entriesByKey(),
                 'invalidContextCounts' => $invalidContextSubmissions->countsByKindSample(),
@@ -125,19 +132,15 @@ final class CollectedTelemetry
         );
     }
 
-    public function addTelemetryOfTheFileLine(string $telemetryFileLine): void
+    /**
+     * @param array<array-key, mixed> $telemetryOfAClient
+     */
+    public function addTelemetryOfAClient(int $collectingSinceEpochMilliseconds, array $telemetryOfAClient): void
     {
-        $telemetryOfAClient = json_decode($telemetryFileLine, associative: true);
-        if (!is_array($telemetryOfAClient)) {
-            return;
-        }
-
-        $collectingSince = $telemetryOfAClient['collectingSince'] ?? null;
-        if (!StoredNumber::isEpochMilliseconds($collectingSince)) {
-            return;
-        }
-
-        $this->collectingSinceEpochMilliseconds = min($this->collectingSinceEpochMilliseconds, $collectingSince);
+        $this->collectingSinceEpochMilliseconds = min(
+            $this->collectingSinceEpochMilliseconds,
+            $collectingSinceEpochMilliseconds,
+        );
         foreach (self::countsIn($telemetryOfAClient['evaluationCounts'] ?? null) as $eventJson => $count) {
             if (self::isAJsonObject((string) $eventJson)) {
                 $this->countEvaluations((string) $eventJson, $count);
@@ -170,13 +173,9 @@ final class CollectedTelemetry
         );
     }
 
-    /**
-     * @param array<string, string> $metaContext
-     */
     public function reportJson(
         #[\SensitiveParameter]
         string $serverSdkKey,
-        array $metaContext,
         int $reportedAtEpochMilliseconds,
     ): string {
         $startTime = ReportedTime::of($this->collectingSinceEpochMilliseconds);
@@ -212,7 +211,7 @@ final class CollectedTelemetry
             . '"aggregatedEvents":{"evaluatedConfig":[%s],"invalidContext":[%s]},'
             . '"droppedEvents":{"evaluatedConfig":%d,"capturedContexts":%d}}',
             json_encode($serverSdkKey, self::JSON_FLAGS),
-            json_encode($metaContext, self::JSON_FLAGS),
+            json_encode($this->metaContext, self::JSON_FLAGS),
             implode(',', $this->capturedContextJsonsByKindAndIdentifier->entriesByKey()),
             implode(',', $this->trackedEventQueue->entryJsons()),
             implode(',', $evaluatedConfig),

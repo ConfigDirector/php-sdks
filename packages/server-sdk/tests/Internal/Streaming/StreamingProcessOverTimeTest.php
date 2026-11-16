@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ConfigDirector\Tests\Internal\Streaming;
 
+use ConfigDirector\ConfigDirector;
 use ConfigDirector\ConfigDirectorConnectionException;
 use ConfigDirector\ConfigDirectorException;
 use ConfigDirector\ConnectionOptions;
@@ -12,6 +13,7 @@ use ConfigDirector\Internal\Client\DefaultConfigDirectorClient;
 use ConfigDirector\Internal\Client\EventHandlers;
 use ConfigDirector\Internal\Connection\LocalStoreConnection;
 use ConfigDirector\Internal\Identity\SdkIdentity;
+use ConfigDirector\Internal\Identity\Wrapper;
 use ConfigDirector\Internal\LocalStore\LocalStore;
 use ConfigDirector\Internal\LocalStore\LocalStoreOpenedOnFirstUse;
 use ConfigDirector\Internal\LocalStore\StoredPayload;
@@ -31,6 +33,7 @@ use ConfigDirector\Tests\Support\RecordingLogger;
 use ConfigDirector\Tests\Support\ScriptedStreamServer;
 use ConfigDirector\Tests\Support\SettableClock;
 use ConfigDirector\Tests\Support\TemporaryFolder;
+use ConfigDirector\Version;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 use Psr\Log\NullLogger;
@@ -837,10 +840,64 @@ final class StreamingProcessOverTimeTest extends TestCase
         self::assertSame([], $server->requestsReceivedAt('/server/polling/v1'));
         self::assertCount(4, $reports);
         self::assertSame(
-            ['stream-host', 'stream-host', 'stream-host', 'stream-host'],
-            array_column(array_column(array_column($reports, 'body'), 'metaContext'), 'appName'),
+            array_fill(0, 4, ['sdkName' => 'php-server-sdk', 'sdkVersion' => Version::CURRENT]),
+            array_column(array_column($reports, 'body'), 'metaContext'),
         );
         self::assertSame([[2], [3], [3], [3]], array_map(self::evaluationCountsReportedIn(...), $reports));
+    }
+
+    public function testTheReadsOfAnOpenFeatureProviderClientAndOfAnSdkClientAreEachReportedOnceByTheStreamingProcessUnderTheSdkAndAppOfTheirClient(): void
+    {
+        $server = $this->serverStreaming([['chunks' => [self::eventOfTheFullPayloadWith(self::PAGE_SIZE_OF_25)]]]);
+        $streamingProcess = $this->streamingProcessHoldingTheLocalStore();
+        $this->advanceUntil($streamingProcess, fn(): bool => $this->storedPayload() !== null);
+
+        $providerClient = Wrapper::OpenFeatureServerProvider->createClient(
+            serverSdkKey: 'server-sdk-key',
+            connection: new ConnectionOptions(url: $server->url, storagePath: $this->storagePath),
+            logger: new NullLogger(),
+        );
+        $providerClient->initialize();
+        $pageSizeReadThroughTheProvider = $providerClient->getValue('page-size', 10, new Context(id: 'user-42'));
+        $providerClient->dispose();
+        $sdkClient = ConfigDirector::createClient(
+            serverSdkKey: 'server-sdk-key',
+            metadata: new Metadata(appName: 'storefront', appVersion: '2.1.0'),
+            connection: new ConnectionOptions(url: $server->url, storagePath: $this->storagePath),
+            logger: new NullLogger(),
+        );
+        $sdkClient->initialize();
+        $pageSizeReadThroughTheSdk = $sdkClient->getValue('page-size', 10, new Context(id: 'user-42'));
+        $sdkClient->dispose();
+        $reportsSentByTheClients = $server->requestsReceivedAt('/server/telemetry/v1');
+        $this->advanceTheClockWhileTheStreamShowsSignsOfLife($streamingProcess, 30_000);
+        $this->advanceTheClockWhileTheStreamShowsSignsOfLife($streamingProcess, 30_000);
+
+        $reports = $server->requestsReceivedAt('/server/telemetry/v1');
+        usort(
+            $reports,
+            static fn(array $report, array $otherReport): int => strcmp($report['bodyText'], $otherReport['bodyText']),
+        );
+        self::assertSame(25, $pageSizeReadThroughTheProvider);
+        self::assertSame(25, $pageSizeReadThroughTheSdk);
+        self::assertSame([], $reportsSentByTheClients);
+        self::assertSame(
+            [
+                ['sdkName' => 'php-openfeature-server-provider', 'sdkVersion' => '0.0.0-dev'],
+                [
+                    'sdkName' => 'php-server-sdk',
+                    'sdkVersion' => Version::CURRENT,
+                    'appName' => 'storefront',
+                    'appVersion' => '2.1.0',
+                ],
+            ],
+            array_column(array_column($reports, 'body'), 'metaContext'),
+        );
+        self::assertSame([[1], [1]], array_map(self::evaluationCountsReportedIn(...), $reports));
+        self::assertSame(
+            ['php-server-sdk/' . Version::CURRENT, 'php-server-sdk/' . Version::CURRENT],
+            array_column(array_column($reports, 'headers'), 'user-agent'),
+        );
     }
 
     public function testAfterItStopsTheFirstRequestPastOnePollingIntervalPolls(): void
@@ -888,9 +945,6 @@ final class StreamingProcessOverTimeTest extends TestCase
         $reports = $server->requestsReceivedAt('/server/telemetry/v1');
         self::assertSame([], $reportsSentWhileItRan);
         self::assertCount(1, $reports);
-        self::assertIsArray($reports[0]['body']);
-        self::assertIsArray($reports[0]['body']['metaContext']);
-        self::assertArrayNotHasKey('appName', $reports[0]['body']['metaContext']);
     }
 
     public function testAfterATelemetryReportRefusedWithA401TheStreamingProcessLogsOneWarningSendsNoNextReportAndKeepsItsStream(): void
@@ -1082,7 +1136,6 @@ final class StreamingProcessOverTimeTest extends TestCase
                     clock: $this->clock,
                     logger: $requestLogger,
                 ),
-                eventQueueLimit: 5_000,
                 flushIntervalMilliseconds: 10_000,
                 clientLifetime: $clientLifetime,
                 clock: $this->clock,

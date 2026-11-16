@@ -29,13 +29,20 @@ final readonly class SdkIdentity
      */
     public function metaContextOfAnApplicationWith(Metadata $metadata): array
     {
+        return self::metaContextNaming($this->sdkName, $this->sdkVersion, $metadata->appName, $metadata->appVersion);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function metaContextNaming(
+        string $sdkName,
+        string $sdkVersion,
+        ?string $appName,
+        ?string $appVersion,
+    ): array {
         return array_filter(
-            [
-                'sdkName' => $this->sdkName,
-                'sdkVersion' => $this->sdkVersion,
-                'appName' => $metadata->appName,
-                'appVersion' => $metadata->appVersion,
-            ],
+            ['sdkName' => $sdkName, 'sdkVersion' => $sdkVersion, 'appName' => $appName, 'appVersion' => $appVersion],
             static fn(?string $value): bool => $value !== null,
         );
     }

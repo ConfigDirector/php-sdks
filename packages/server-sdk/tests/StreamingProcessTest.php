@@ -338,10 +338,6 @@ final class StreamingProcessTest extends TestCase
 
         $reports = $server->requestsReceivedAt('/server/telemetry/v1');
         self::assertCount($reportsSentByTheTimeItWasGone + 1, $reports);
-        $reportOfTheRequest = $reports[$reportsSentByTheTimeItWasGone];
-        self::assertIsArray($reportOfTheRequest['body']);
-        self::assertIsArray($reportOfTheRequest['body']['metaContext']);
-        self::assertArrayNotHasKey('appName', $reportOfTheRequest['body']['metaContext']);
     }
 
     #[RequiresPhpExtension('pcntl')]

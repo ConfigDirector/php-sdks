@@ -27,16 +27,12 @@ final class LocalStoreTelemetry implements ClientTelemetry
     public function __construct(
         private readonly LocalStoreOpenedOnFirstUse $localStore,
         private readonly EventReporter $eventReporter,
-        private readonly int $eventQueueLimit,
         private readonly int $flushIntervalMilliseconds,
         private readonly ClientLifetime $clientLifetime,
         private readonly Clock $clock,
         private readonly LoggerInterface $logger,
     ) {
-        $this->telemetryOfThisClient = new CollectedTelemetry(
-            $eventQueueLimit,
-            collectingSinceEpochMilliseconds: $clock->epochMilliseconds(),
-        );
+        $this->telemetryOfThisClient = $eventReporter->emptyTelemetryCollectingSince($clock->epochMilliseconds());
         $this->movedToTheStoreAtMonotonicMilliseconds = $clock->monotonicMilliseconds();
     }
 
@@ -122,9 +118,8 @@ final class LocalStoreTelemetry implements ClientTelemetry
     private function moveToTheStoreAndSend(bool $sendsWhatTheStoreHoldsAtOnce): void
     {
         $telemetryToMove = $this->telemetryOfThisClient;
-        $this->telemetryOfThisClient = new CollectedTelemetry(
-            $this->eventQueueLimit,
-            collectingSinceEpochMilliseconds: $this->clock->epochMilliseconds(),
+        $this->telemetryOfThisClient = $this->eventReporter->emptyTelemetryCollectingSince(
+            $this->clock->epochMilliseconds(),
         );
         if ($telemetryToMove->isEmpty() && !$this->localStore->isOpened()) {
             return;

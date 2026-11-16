@@ -25,9 +25,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Telemetry that cannot be scheduled for a report, because the local store's file that records when
   telemetry was last sent cannot be written, now stays in the local store and is reported once that
   file can be written. It was discarded before. The warning that names the file is logged as before.
+- A host sends one telemetry report for each combination of SDK name, SDK version, `appName` and
+  `appVersion` whose clients collected telemetry since its last report, where it sent one report
+  for all of them. Up to 20 combinations besides the sending process's own get a report of their
+  own, and what the clients of further ones collected is reported under the sending process's.
+  Each report holds up to `eventQueueLimit` entries and 1,000 tracked events and counts what it
+  leaves out over that limit as dropped. What requests could not add to the local store and what
+  a failed report held are counted as dropped under the SDK name and `metadata` of the process
+  that sends the next report, as before. When the clients of 21 combinations filled the local
+  store's telemetry to its 8 MiB limit, the request that sends it takes about twice the memory it
+  takes for one combination, because nothing is left out then.
+- The reports of one send share the five seconds a report is given for its answer. After a report
+  that gets no answer, the remaining ones are not sent and are counted as dropped with it. After
+  one refused with a 4xx status other than 413 and 429, they are discarded with it and telemetry
+  stops for one hour, as it did for one report. After any other refusal the remaining ones are
+  still sent.
 - While processes of 0.1.0 and of this version share a local store, during a deploy, every read is
   still reported once. Only a count of dropped telemetry that one version recorded is not reported
-  by the other.
+  by the other. Telemetry that a 0.1.0 process collected is reported under the SDK name and
+  `metadata` of the process that sends it, and a 0.1.0 process sends every report under its own.
+
+### Fixed
+
+- Evaluations, contexts, invalid context kinds and tracked events are reported under the SDK name
+  and version and the `metadata` of the client that collected them, whichever process sends the
+  report. Until now a report carried those of the process that sent it. So on a host that runs
+  `vendor/bin/configdirector-stream` every read appeared in ConfigDirector as `php-server-sdk` with
+  the `appName` and `appVersion` of the streaming process, the reads made through the OpenFeature
+  provider included, and without it the reads of two applications that share a local store
+  appeared under whichever of them sent the report.
 
 ## [0.1.0] - 2026-11-14
 

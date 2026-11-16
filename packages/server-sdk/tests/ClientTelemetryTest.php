@@ -52,7 +52,7 @@ final class ClientTelemetryTest extends TestCase
     public function testAReadIsSentAsOneReportToTheTelemetryEndpoint(): void
     {
         $this->startSdkServerServing(['new-checkout' => self::booleanConfigServedByARollout()]);
-        $client = $this->initializedClient();
+        $client = $this->initializedClient(metadata: new Metadata(appName: 'storefront', appVersion: '2.1.0'));
         $client->getValue('new-checkout', false, new Context(id: 'user-42'));
         $client->dispose();
 
@@ -74,6 +74,184 @@ final class ClientTelemetryTest extends TestCase
             $report['body']['metaContext'],
         );
         self::assertSame(['evaluatedConfig' => 0, 'capturedContexts' => 0], $report['body']['droppedEvents']);
+    }
+
+    public function testReadsOfTwoClientsWithDifferentMetadataAreEachReportedUnderTheAppNameAndVersionOfTheirOwnClient(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront', appVersion: '4.2.0'));
+        $storefront->getValue('unknown-flag', false);
+        $storefront->dispose();
+        $worker = $this->initializedClient(metadata: new Metadata(appName: 'storefront-worker', appVersion: '1.3.0'));
+        $worker->getValue('unknown-banner', 'Welcome');
+        $worker->dispose();
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job', appVersion: '0.9.0'));
+
+        self::assertSame(
+            ['storefront 4.2.0' => ['unknown-flag'], 'storefront-worker 1.3.0' => ['unknown-banner']],
+            $this->evaluatedKeysOfTheReportsByAppNameAndVersion(),
+        );
+    }
+
+    public function testATelemetryLineWrittenByVersion010WhichNamesNoClientIsReportedOnceUnderTheSdkAndAppOfTheProcessThatSendsIt(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        $client = $this->initializedClient(metadata: new Metadata(appName: 'storefront', appVersion: '4.2.0'));
+        $client->getValue('unknown-flag', false);
+        $client->dispose();
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl',
+            '{"collectingSince":1794484800000,"evaluationCounts":{"{\"contextId\":\"user-42\",\"contextKind\":\"user\",'
+            . '\"key\":\"unknown-banner\",\"defaultValue\":{\"value\":\"Welcome\"},\"requestedType\":\"string\",'
+            . '\"evaluatedValue\":{\"value\":\"Welcome\"},\"usedDefault\":true,'
+            . '\"evaluationReason\":\"config-state-missing\"}":4},"capturedContexts":{"user:user-42":'
+            . '"{\"id\":\"user-42\",\"kind\":\"user\",\"anonymous\":false}"},"invalidContextCounts":[],'
+            . '"invalidContextCountBeyondTheSampleLimit":0,"droppedEvaluations":0,"droppedCapturedContexts":0,'
+            . '"trackedEvents":[]}' . "\n",
+            FILE_APPEND,
+        );
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job', appVersion: '0.9.0'));
+
+        self::assertSame(
+            ['nightly-job 0.9.0' => ['unknown-banner'], 'storefront 4.2.0' => ['unknown-flag']],
+            $this->evaluatedKeysOfTheReportsByAppNameAndVersion(),
+        );
+        self::assertSame(
+            ['nightly-job 0.9.0' => [4], 'storefront 4.2.0' => [1]],
+            $this->evaluationCountsOfTheReportsByAppNameAndVersion(),
+        );
+        self::assertContains(
+            [
+                'sdkName' => 'php-server-sdk',
+                'sdkVersion' => Version::CURRENT,
+                'appName' => 'nightly-job',
+                'appVersion' => '0.9.0',
+            ],
+            array_column($this->bodiesOfTheReports(), 'metaContext'),
+        );
+    }
+
+    public function testATelemetryLineWhoseMetaContextNamesNoSdkIsReportedUnderTheSdkAndAppOfTheProcessThatSendsIt(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        $client = $this->initializedClient(metadata: new Metadata(appName: 'storefront', appVersion: '4.2.0'));
+        $client->getValue('unknown-flag', false);
+        $client->dispose();
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl',
+            '{"collectingSince":1794484800000,"metaContext":{"sdkVersion":"0.1.1","appName":"storefront-worker"},'
+            . '"evaluationCounts":{"{\"key\":\"unknown-banner\",\"defaultValue\":{\"value\":\"Welcome\"},'
+            . '\"requestedType\":\"string\",\"evaluatedValue\":{\"value\":\"Welcome\"},\"usedDefault\":true,'
+            . '\"evaluationReason\":\"config-state-missing\"}":1}}' . "\n",
+            FILE_APPEND,
+        );
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job', appVersion: '0.9.0'));
+
+        self::assertSame(
+            ['nightly-job 0.9.0' => ['unknown-banner'], 'storefront 4.2.0' => ['unknown-flag']],
+            $this->evaluatedKeysOfTheReportsByAppNameAndVersion(),
+        );
+    }
+
+    public function testATelemetryLineWhoseMetaContextNamesNoSdkVersionIsReportedUnderTheSdkAndAppOfTheProcessThatSendsIt(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        $client = $this->initializedClient(metadata: new Metadata(appName: 'storefront', appVersion: '4.2.0'));
+        $client->getValue('unknown-flag', false);
+        $client->dispose();
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl',
+            '{"collectingSince":1794484800000,"metaContext":{"sdkName":"php-server-sdk","appName":"storefront-worker"},'
+            . '"evaluationCounts":{"{\"key\":\"unknown-banner\",\"defaultValue\":{\"value\":\"Welcome\"},'
+            . '\"requestedType\":\"string\",\"evaluatedValue\":{\"value\":\"Welcome\"},\"usedDefault\":true,'
+            . '\"evaluationReason\":\"config-state-missing\"}":1}}' . "\n",
+            FILE_APPEND,
+        );
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job', appVersion: '0.9.0'));
+
+        self::assertSame(
+            ['nightly-job 0.9.0' => ['unknown-banner'], 'storefront 4.2.0' => ['unknown-flag']],
+            $this->evaluatedKeysOfTheReportsByAppNameAndVersion(),
+        );
+    }
+
+    public function testATelemetryLineWhoseMetaContextHoldsAnAppNameThatIsNotTextIsReportedUnderTheSdkAndAppOfTheProcessThatSendsIt(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        $client = $this->initializedClient(metadata: new Metadata(appName: 'storefront', appVersion: '4.2.0'));
+        $client->getValue('unknown-flag', false);
+        $client->dispose();
+        file_put_contents(
+            $this->localStoreFolder() . DIRECTORY_SEPARATOR . 'telemetry.jsonl',
+            '{"collectingSince":1794484800000,"metaContext":{"sdkName":"php-server-sdk","sdkVersion":"0.1.1",'
+            . '"appName":42},"evaluationCounts":{"{\"key\":\"unknown-banner\",\"defaultValue\":{\"value\":\"Welcome\"},'
+            . '\"requestedType\":\"string\",\"evaluatedValue\":{\"value\":\"Welcome\"},\"usedDefault\":true,'
+            . '\"evaluationReason\":\"config-state-missing\"}":1}}' . "\n",
+            FILE_APPEND,
+        );
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job', appVersion: '0.9.0'));
+
+        self::assertSame(
+            ['nightly-job 0.9.0' => ['unknown-banner'], 'storefront 4.2.0' => ['unknown-flag']],
+            $this->evaluatedKeysOfTheReportsByAppNameAndVersion(),
+        );
+    }
+
+    public function testReadsOfClientsBeyondTwentyDifferentMetaContextsAreReportedUnderTheSdkAndAppOfTheProcessThatSendsThem(): void
+    {
+        $this->startSdkServerServing([], array_fill(0, 21, ['status' => 200]));
+        foreach (range(1, 22) as $number) {
+            $client = $this->initializedClient(metadata: new Metadata(appName: "app-{$number}"));
+            $client->getValue("unknown-flag-{$number}", false);
+            $client->dispose();
+        }
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job'));
+
+        $evaluatedKeys = $this->evaluatedKeysOfTheReportsByAppNameAndVersion();
+        self::assertCount(21, $this->telemetryRequestsReceived());
+        self::assertSame(['unknown-flag-1'], $evaluatedKeys['app-1'] ?? null);
+        self::assertSame(['unknown-flag-20'], $evaluatedKeys['app-20'] ?? null);
+        self::assertSame(['unknown-flag-21', 'unknown-flag-22'], $evaluatedKeys['nightly-job'] ?? null);
+    }
+
+    public function testAReadOfAClientWhoseAppNameIsNotUtf8IsReportedOnceWithTheUnreadableBytesOfTheAppNameReplaced(): void
+    {
+        $this->startSdkServerServing([]);
+        $client = $this->initializedClient(metadata: new Metadata(appName: "caf\xE9"));
+        $client->getValue('unknown-flag', false);
+        $client->dispose();
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: "caf\xE9"));
+
+        self::assertSame(["caf\u{FFFD}" => ['unknown-flag']], $this->evaluatedKeysOfTheReportsByAppNameAndVersion());
+    }
+
+    public function testTrackedEventsOfClientsWithDifferentMetadataAreReportedUpToAThousandUnderEachAppNameAndTheRequestThatSendsThemLogsOneWarning(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        foreach (['storefront', 'storefront', 'storefront-worker', 'storefront-worker'] as $appName) {
+            $client = $this->initializedClient(metadata: new Metadata(appName: $appName));
+            foreach (range(1, 600) as $number) {
+                $client->track("event-{$number}");
+            }
+            $client->dispose();
+        }
+        $warningsLoggedByTheClientsThatTracked = count($this->logger->contextsLoggedAt(LogLevel::WARNING));
+
+        $this->endARequestAfterTheFlushInterval();
+
+        self::assertSame(
+            ['storefront' => 1_000, 'storefront-worker' => 1_000],
+            $this->trackedEventsReportedByAppNameAndVersion(),
+        );
+        self::assertSame(0, $warningsLoggedByTheClientsThatTracked);
+        self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
     public function testAValueServedByAPercentageRolloutIsReportedWithItsRuleShareAndVariation(): void
@@ -712,6 +890,33 @@ final class ClientTelemetryTest extends TestCase
         );
     }
 
+    public function testTheReportOfEachAppNameHoldsUpToTheEventQueueLimitAndReportsWhatItLeftOutAsDropped(): void
+    {
+        $this->startSdkServerServing([], [['status' => 200], ['status' => 200]]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront'));
+        foreach (range(1, 80) as $number) {
+            $storefront->getValue("unknown-flag-{$number}", false);
+        }
+        $storefront->dispose();
+        $worker = $this->initializedClient(metadata: new Metadata(appName: 'storefront-worker'));
+        foreach (range(1, 75) as $number) {
+            $worker->getValue("unknown-banner-{$number}", 'Welcome');
+        }
+        $worker->dispose();
+
+        $this->endARequestAfterTheFlushInterval(eventQueueLimit: 100);
+
+        $evaluatedKeys = $this->evaluatedKeysOfTheReportsByAppNameAndVersion();
+        self::assertCount(70, $evaluatedKeys['storefront'] ?? []);
+        self::assertSame('unknown-flag-11', $evaluatedKeys['storefront'][0] ?? null);
+        self::assertCount(70, $evaluatedKeys['storefront-worker'] ?? []);
+        self::assertSame('unknown-banner-6', $evaluatedKeys['storefront-worker'][0] ?? null);
+        self::assertSame(
+            ['storefront' => 10, 'storefront-worker' => 5],
+            $this->droppedEvaluationsReportedByAppNameAndVersion(),
+        );
+    }
+
     public function testTelemetryThatWouldTakeTheStoredTelemetryPastEightMebibytesIsReportedAsDropped(): void
     {
         $this->startSdkServerServing([]);
@@ -876,6 +1081,83 @@ final class ClientTelemetryTest extends TestCase
         self::assertNotSame('', $warnings[0]['error']);
     }
 
+    public function testAfterAReportThatGetsNoAnswerTheOtherReportsOfThatTelemetryAreNotSentAndTheNextReportCountsWhatTheyHeldAsDropped(): void
+    {
+        $this->startSdkServerServing([], [['closes' => 'before-answering'], ['status' => 200]]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront'));
+        $storefront->getValue('unknown-flag', false, new Context(id: 'user-42'));
+        $storefront->dispose();
+        $worker = $this->initializedClient(metadata: new Metadata(appName: 'storefront-worker'));
+        $worker->getValue('unknown-banner', 'Welcome');
+        $worker->dispose();
+        $this->endARequestAfterTheFlushInterval();
+        $reportsSentOfTheTelemetryOfBothClients = count($this->telemetryRequestsReceived());
+
+        $this->endARequestAfterTheFlushInterval();
+
+        [, $laterReport] = $this->telemetryRequestsReceived();
+        self::assertSame(1, $reportsSentOfTheTelemetryOfBothClients);
+        self::assertIsArray($laterReport['body']);
+        self::assertSame(['evaluatedConfig' => 2, 'capturedContexts' => 1], $laterReport['body']['droppedEvents']);
+        self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::WARNING));
+    }
+
+    public function testAfterAReportRefusedWithA401TheOtherReportsOfThatTelemetryAreNotSent(): void
+    {
+        $this->startSdkServerServing([], [['status' => 401], ['status' => 200]]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront'));
+        $storefront->getValue('unknown-flag', false);
+        $storefront->dispose();
+        $worker = $this->initializedClient(metadata: new Metadata(appName: 'storefront-worker'));
+        $worker->getValue('unknown-banner', 'Welcome');
+        $worker->dispose();
+
+        $this->endARequestAfterTheFlushInterval();
+
+        self::assertCount(1, $this->telemetryRequestsReceived());
+        self::assertSame([['status' => 401]], $this->logger->contextsLoggedAt(LogLevel::WARNING));
+    }
+
+    public function testAfterAReportAnsweredWithA500TheOtherReportOfThatTelemetryIsStillSentAndTheNextReportCountsOnlyTheRefusedOneAsDropped(): void
+    {
+        $this->startSdkServerServing([], [['status' => 500], ['status' => 200], ['status' => 200]]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront'));
+        $storefront->getValue('unknown-flag', false);
+        $storefront->dispose();
+        $worker = $this->initializedClient(metadata: new Metadata(appName: 'storefront-worker'));
+        $worker->getValue('unknown-banner', 'Welcome');
+        $worker->dispose();
+        $this->endARequestAfterTheFlushInterval();
+        $reportsSentOfTheTelemetryOfBothClients = count($this->telemetryRequestsReceived());
+
+        $this->endARequestAfterTheFlushInterval();
+
+        [, , $laterReport] = $this->telemetryRequestsReceived();
+        self::assertSame(2, $reportsSentOfTheTelemetryOfBothClients);
+        self::assertIsArray($laterReport['body']);
+        self::assertSame(['evaluatedConfig' => 1, 'capturedContexts' => 0], $laterReport['body']['droppedEvents']);
+        self::assertSame([['status' => 500]], $this->logger->contextsLoggedAt(LogLevel::WARNING));
+    }
+
+    public function testWhatAFailedReportOfAnotherClientHeldIsCountedAsDroppedUnderTheSdkAndAppOfTheProcessThatSendsTheNextReport(): void
+    {
+        $this->startSdkServerServing([], [['status' => 500], ['status' => 200]]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront'));
+        $storefront->getValue('unknown-flag', false);
+        $storefront->dispose();
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job'));
+
+        $this->endARequestAfterTheFlushInterval(new Metadata(appName: 'nightly-job'));
+
+        [, $laterReport] = $this->telemetryRequestsReceived();
+        self::assertIsArray($laterReport['body']);
+        self::assertSame(
+            ['sdkName' => 'php-server-sdk', 'sdkVersion' => Version::CURRENT, 'appName' => 'nightly-job'],
+            $laterReport['body']['metaContext'],
+        );
+        self::assertSame(['evaluatedConfig' => 1, 'capturedContexts' => 0], $laterReport['body']['droppedEvents']);
+    }
+
     public function testAReportWaitsFiveSecondsForItsAnswer(): void
     {
         $this->startSdkServerServing([], [['status' => 200, 'delayMilliseconds' => 7_000]]);
@@ -892,6 +1174,36 @@ final class ClientTelemetryTest extends TestCase
 
         self::assertGreaterThanOrEqual(4_900, $millisecondsWaited);
         self::assertLessThan(6_500, $millisecondsWaited);
+        self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::WARNING));
+    }
+
+    public function testTheReportsOfTwoAppNamesTogetherWaitFiveSecondsForTheirAnswersAndTheOneLeftUnansweredIsCountedAsDropped(): void
+    {
+        $this->startSdkServerServing([], [
+            ['status' => 200, 'delayMilliseconds' => 3_500],
+            ['status' => 200, 'delayMilliseconds' => 3_500],
+            ['status' => 200],
+        ]);
+        $storefront = $this->initializedClient(metadata: new Metadata(appName: 'storefront'));
+        $storefront->getValue('unknown-flag', false);
+        $storefront->dispose();
+        $worker = $this->initializedClient(metadata: new Metadata(appName: 'storefront-worker'));
+        $worker->getValue('unknown-banner', 'Welcome');
+        $worker->dispose();
+        $clientThatSends = $this->client(flushInterval: 1);
+        $clientThatSends->initialize();
+        self::letTheStoredTelemetryAgePastOneMillisecond();
+
+        $startedAt = hrtime(true);
+        $clientThatSends->dispose();
+        $millisecondsWaited = intdiv(hrtime(true) - $startedAt, 1_000_000);
+        $this->endARequestAfterTheFlushInterval();
+
+        [, , $laterReport] = $this->telemetryRequestsReceived();
+        self::assertGreaterThanOrEqual(4_900, $millisecondsWaited);
+        self::assertLessThan(6_500, $millisecondsWaited);
+        self::assertIsArray($laterReport['body']);
+        self::assertSame(['evaluatedConfig' => 1, 'capturedContexts' => 0], $laterReport['body']['droppedEvents']);
         self::assertCount(1, $this->logger->contextsLoggedAt(LogLevel::WARNING));
     }
 
@@ -1527,9 +1839,9 @@ final class ClientTelemetryTest extends TestCase
         );
     }
 
-    private function initializedClient(int $eventQueueLimit = 5_000): ConfigDirectorClient
+    private function initializedClient(int $eventQueueLimit = 5_000, ?Metadata $metadata = null): ConfigDirectorClient
     {
-        $client = $this->client(flushInterval: 60_000, eventQueueLimit: $eventQueueLimit);
+        $client = $this->client(flushInterval: 60_000, metadata: $metadata, eventQueueLimit: $eventQueueLimit);
         $client->initialize();
 
         return $client;
@@ -1566,6 +1878,116 @@ final class ClientTelemetryTest extends TestCase
             $this->server?->requestsReceived() ?? [],
             static fn(array $request): bool => $request['path'] === '/server/telemetry/v1',
         ));
+    }
+
+    /**
+     * @return list<array<array-key, mixed>>
+     */
+    private function bodiesOfTheReports(): array
+    {
+        $bodies = [];
+        foreach ($this->telemetryRequestsReceived() as $report) {
+            self::assertIsArray($report['body']);
+            $bodies[] = $report['body'];
+        }
+
+        return $bodies;
+    }
+
+    /**
+     * @param array<array-key, mixed> $bodyOfAReport
+     */
+    private static function appNameAndVersionReportedIn(array $bodyOfAReport): string
+    {
+        self::assertIsArray($bodyOfAReport['metaContext']);
+        $appName = $bodyOfAReport['metaContext']['appName'] ?? '';
+        $appVersion = $bodyOfAReport['metaContext']['appVersion'] ?? '';
+        self::assertIsString($appName);
+        self::assertIsString($appVersion);
+
+        return rtrim("{$appName} {$appVersion}");
+    }
+
+    /**
+     * @param array<array-key, mixed> $bodyOfAReport
+     *
+     * @return list<mixed>
+     */
+    private static function evaluationsReportedIn(array $bodyOfAReport): array
+    {
+        self::assertIsArray($bodyOfAReport['aggregatedEvents']);
+        self::assertIsArray($bodyOfAReport['aggregatedEvents']['evaluatedConfig']);
+
+        return array_values($bodyOfAReport['aggregatedEvents']['evaluatedConfig']);
+    }
+
+    /**
+     * @return array<string, list<mixed>>
+     */
+    private function evaluatedKeysOfTheReportsByAppNameAndVersion(): array
+    {
+        $evaluatedKeys = [];
+        foreach ($this->bodiesOfTheReports() as $body) {
+            $appNameAndVersion = self::appNameAndVersionReportedIn($body);
+            $evaluatedKeys[$appNameAndVersion] = [
+                ...$evaluatedKeys[$appNameAndVersion] ?? [],
+                ...array_column(array_column(self::evaluationsReportedIn($body), 'event'), 'key'),
+            ];
+        }
+        ksort($evaluatedKeys);
+
+        return $evaluatedKeys;
+    }
+
+    /**
+     * @return array<string, list<mixed>>
+     */
+    private function evaluationCountsOfTheReportsByAppNameAndVersion(): array
+    {
+        $evaluationCounts = [];
+        foreach ($this->bodiesOfTheReports() as $body) {
+            $appNameAndVersion = self::appNameAndVersionReportedIn($body);
+            $evaluationCounts[$appNameAndVersion] = [
+                ...$evaluationCounts[$appNameAndVersion] ?? [],
+                ...array_column(self::evaluationsReportedIn($body), 'count'),
+            ];
+        }
+        ksort($evaluationCounts);
+
+        return $evaluationCounts;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function trackedEventsReportedByAppNameAndVersion(): array
+    {
+        $trackedEvents = [];
+        foreach ($this->bodiesOfTheReports() as $body) {
+            self::assertIsArray($body['discreteEvents']);
+            self::assertIsArray($body['discreteEvents']['trackedEvents']);
+            $appNameAndVersion = self::appNameAndVersionReportedIn($body);
+            $trackedEvents[$appNameAndVersion] = ($trackedEvents[$appNameAndVersion] ?? 0)
+                + count($body['discreteEvents']['trackedEvents']);
+        }
+        ksort($trackedEvents);
+
+        return $trackedEvents;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function droppedEvaluationsReportedByAppNameAndVersion(): array
+    {
+        $droppedEvaluations = [];
+        foreach ($this->bodiesOfTheReports() as $body) {
+            self::assertIsArray($body['droppedEvents']);
+            $droppedEvaluations[self::appNameAndVersionReportedIn($body)] = $body['droppedEvents']['evaluatedConfig'];
+        }
+        ksort($droppedEvaluations);
+
+        return $droppedEvaluations;
     }
 
     /**

@@ -259,7 +259,6 @@ final class ClientMemoryInALongRunningProcessTest extends TestCase
                     $clock,
                     $logger,
                 ),
-                self::EVENT_QUEUE_LIMIT,
                 self::FLUSH_INTERVAL_MILLISECONDS,
                 $clientLifetime,
                 $clock,

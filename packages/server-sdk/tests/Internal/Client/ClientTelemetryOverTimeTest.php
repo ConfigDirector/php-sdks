@@ -606,7 +606,6 @@ final class ClientTelemetryOverTimeTest extends TestCase
                     clock: $this->clock,
                     logger: $this->logger,
                 ),
-                eventQueueLimit: 5_000,
                 flushIntervalMilliseconds: self::FLUSH_INTERVAL_MILLISECONDS,
                 clientLifetime: new ClientLifetime($this->clock, self::FLUSH_INTERVAL_MILLISECONDS),
                 clock: $this->clock,

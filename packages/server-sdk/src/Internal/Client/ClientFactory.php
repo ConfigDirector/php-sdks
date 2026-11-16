@@ -175,7 +175,6 @@ final class ClientFactory
                     $clock,
                     $logger,
                 ),
-                $telemetryOptions->eventQueueLimit,
                 $telemetryOptions->flushInterval,
                 $clientLifetime,
                 $clock,

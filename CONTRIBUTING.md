@@ -103,8 +103,8 @@ The telemetry tests of the server SDK send their reports to the same scripted SD
 with a flush interval of one millisecond stands for the later request that sends the report. In
 `ClientTelemetryAcrossRequestsTest` each request is a PHP process, started from
 `packages/server-sdk/tests/Processes/serve-a-request-that-reads-a-config.php`, and
-`ClientTelemetryOverTimeTest` moves a settable clock instead of waiting. One test waits the five
-seconds a report is given for its answer.
+`ClientTelemetryOverTimeTest` moves a settable clock instead of waiting. Two tests wait the five
+seconds the reports of one send are given for their answers.
 
 `ClientsOfManyProcessesTest` runs 50 PHP processes that serve requests on one local store for about
 seven seconds each, from `packages/server-sdk/tests/Internal/Client/Processes/serve-requests-on-an-accelerated-clock.php`.

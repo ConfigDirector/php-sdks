@@ -11,13 +11,11 @@ use ConfigDirector\Metadata;
 
 final readonly class TelemetryEndpoint
 {
-    private const int TIME_LIMIT_MILLISECONDS = 5_000;
-
     /** @var non-empty-string */
     public string $url;
 
     /** @var array<string, string> */
-    private array $metaContext;
+    public array $metaContext;
 
     private ServerSdkKey $serverSdkKey;
 
@@ -33,16 +31,22 @@ final readonly class TelemetryEndpoint
         $this->serverSdkKey = new ServerSdkKey($serverSdkKey);
     }
 
-    public function answerToAReportOf(CollectedTelemetry $telemetry, int $reportedAtEpochMilliseconds): ReportAnswer
-    {
+    /**
+     * @param int<1, max> $timeLimitMilliseconds
+     */
+    public function answerToAReportOf(
+        CollectedTelemetry $telemetry,
+        int $reportedAtEpochMilliseconds,
+        int $timeLimitMilliseconds,
+    ): ReportAnswer {
         $request = JsonPostRequest::to(
             $this->url,
-            $telemetry->reportJson($this->serverSdkKey->text(), $this->metaContext, $reportedAtEpochMilliseconds),
+            $telemetry->reportJson($this->serverSdkKey->text(), $reportedAtEpochMilliseconds),
             $this->sdkIdentity,
         );
         curl_setopt_array($request, [
-            CURLOPT_TIMEOUT_MS => self::TIME_LIMIT_MILLISECONDS,
-            CURLOPT_CONNECTTIMEOUT_MS => self::TIME_LIMIT_MILLISECONDS,
+            CURLOPT_TIMEOUT_MS => $timeLimitMilliseconds,
+            CURLOPT_CONNECTTIMEOUT_MS => $timeLimitMilliseconds,
             CURLOPT_WRITEFUNCTION => static fn(\CurlHandle $request, string $chunk): int => strlen($chunk),
         ]);
 

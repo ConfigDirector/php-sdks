@@ -115,7 +115,6 @@ for ($request = 1; $request <= (int) $requestsToServe && !file_exists($fileThatE
                 $clock,
                 $logger,
             ),
-            EVENT_QUEUE_LIMIT,
             (int) $flushIntervalMilliseconds,
             $clientLifetime,
             $clock,
