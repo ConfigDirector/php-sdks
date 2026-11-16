@@ -9,7 +9,7 @@ namespace ConfigDirector\OpenFeature;
  */
 final class Version
 {
-    public const string CURRENT = '0.0.0-dev';
+    public const string CURRENT = '0.1.0';
 
     private function __construct() {}
 }
