@@ -9,7 +9,7 @@ namespace ConfigDirector;
  */
 final class Version
 {
-    public const string CURRENT = '0.1.0';
+    public const string CURRENT = '0.1.1';
 
     private function __construct() {}
 }
